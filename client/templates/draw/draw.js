@@ -10,7 +10,7 @@ window.addEventListener('resize', resizeCanvas, false);
 
 Template.drawCanvas.onRendered(function() {
 	var template = this;
-	var fabricCanvas = null;
+	fabricCanvas = null;
 
 	this.autorun(()=> {
 		var currentGame = Games.current({
@@ -38,15 +38,20 @@ Template.drawCanvas.onRendered(function() {
 			});
 
 			fabricCanvas.loadFromJSON(currentGame.state);
-			
+
 			// Draw Null object to refresh canvas after loading JSON
-			fabricCanvas.add(new fabric.Object());
+			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});
 
 		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
+		fabricCanvas.freeDrawingBrush.width=5;
+		
+		fabricCanvas.on("mouse:down", function(e) {
+		});
 
 		fabricCanvas.on("mouse:move", function(e) {
 			if (e.e.buttons & 1) {
+
 				var state = fabricCanvas.toJSON();
 
 				// Here's where we update the collection
