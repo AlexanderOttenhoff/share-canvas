@@ -17,10 +17,12 @@ Template.drawCanvas.onRendered(function() {
 		}
 	});
 
-	fabricCanvas.loadFromJSON(latestCanvasState.state);
+	if (!_.isUndefined(latestCanvasState)) {
+		fabricCanvas.loadFromJSON(latestCanvasState.state);
+		currentId = latestCanvasState._id;
+	}
 	fabricCanvas.isDrawingMode = true;
 
-	currentId = latestCanvasState._id;
 
 	if (_.isUndefined(latestCanvasState)) {
 		CanvasStates.insert({startTime: new Date()}, function(err, res) {
