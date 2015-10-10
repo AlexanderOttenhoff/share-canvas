@@ -14,7 +14,7 @@ class Game extends Record {
 	makeGuess(guess, callback) {
 		return Meteor.call('makeGuess', this._id, guess, callback);
 	}
-};
+}
 
 Meteor.methods({
 
@@ -50,7 +50,7 @@ Meteor.methods({
 // Unofficial Schema:
 var sampleSchema = {
 	answer: "Pirates of the Caribbean",
-	gsuess: [{
+	guess: [{
 		text: "The Matrix",
 		userId: 'userId',
 		guessedAt: new Date(),
