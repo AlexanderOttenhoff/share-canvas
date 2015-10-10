@@ -1,7 +1,3 @@
-// TODO: Remove for release
-// var fabricCanvas;
-var gameId;
-
 function resizeCanvas() {
 	console.log("New Window:", window.innerWidth, window.innerHeight);
 }
@@ -10,7 +6,7 @@ window.addEventListener('resize', resizeCanvas, false);
 
 Template.drawCanvas.onRendered(function() {
 	var template = this;
-	fabricCanvas = null;
+	var fabricCanvas = null;
 
 	this.autorun(()=> {
 		var currentGame = Games.current({
@@ -41,7 +37,7 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas.loadFromJSON(currentGame.state);
 
 			// Draw Null object to refresh canvas after loading JSON
-			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
+			// fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});
 
 		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
