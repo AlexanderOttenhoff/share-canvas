@@ -11,11 +11,7 @@ window.addEventListener('resize', resizeCanvas, false);
 Template.drawCanvas.onRendered(function() {
 	fabricCanvas = new fabric.Canvas('draw-canvas');
 
-	var latestGame = Games.findOne({}, {
-		sort: {
-			startTime: -1
-		}
-	});
+	var latestGame = Games.current();
 
 	if (!_.isUndefined(latestGame)) {
 		fabricCanvas.loadFromJSON(latestGame.state);
@@ -32,7 +28,7 @@ Template.drawCanvas.onRendered(function() {
 		});
 	}
 
-	fabricCanvas.observe("mouse:move", function(e) {
+	fabricCanvas.on("mouse:move", function(e) {
 		if (e.e.buttons & 1) {
 			var state = fabricCanvas.toJSON();
 
