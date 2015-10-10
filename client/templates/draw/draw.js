@@ -15,7 +15,8 @@ Template.drawCanvas.onRendered(function() {
 	this.autorun(()=> {
 		var currentGame = Games.current({
 			fields: {
-				_id: 1
+				_id: 1,
+				drawer: 1
 			}
 		});
 
@@ -28,9 +29,21 @@ Template.drawCanvas.onRendered(function() {
 		if (!fabricCanvas)
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
 
-		fabricCanvas.loadFromJSON(currentGame.state);
+		var isDrawer = true; //currentGame.isDrawer();
 
-		fabricCanvas.isDrawingMode = true //currentGame.isDrawer();
+		Tracker.autorun(() => {
+			var currentGame = Games.findOne(gameId, {
+				reactive: !isDrawer,
+				fields: {state: 1}
+			});
+
+			fabricCanvas.loadFromJSON(currentGame.state);
+			
+			// Draw Null object to refresh canvas after loading JSON
+			fabricCanvas.add(new fabric.Object());
+		});
+
+		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
 
 		fabricCanvas.on("mouse:move", function(e) {
 			if (e.e.buttons & 1) {
