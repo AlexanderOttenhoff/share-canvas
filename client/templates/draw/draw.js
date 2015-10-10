@@ -20,11 +20,11 @@ Template.drawCanvas.onRendered(function() {
 			}
 		});
 
-		var gameId = currentGame._id;
-
 		if (!currentGame) {
 			return;
 		}
+
+		var gameId = currentGame._id;
 
 		if (!fabricCanvas)
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));

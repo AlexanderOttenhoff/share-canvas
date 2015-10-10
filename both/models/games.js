@@ -1,7 +1,8 @@
 Games = new Mongo.Collection('games', {
 	transform(doc) {
 		return new Game(doc);
-	}
+	},
+	_preventAutopublish: true
 });
 
 class Game extends Record {
@@ -16,9 +17,6 @@ class Game extends Record {
 	}
 
 }
-
-
-
 
 Meteor.methods({
 
