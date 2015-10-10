@@ -41,3 +41,5 @@ insecure                # Allow all DB writes from clients (for prototyping)
 
 
 copleykj:livestamp
+http
+rclai89:cheerio
