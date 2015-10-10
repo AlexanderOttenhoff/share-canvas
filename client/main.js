@@ -1,6 +1,6 @@
 // TODO: Remove for release
 // var fabricCanvas;
-var currentId;
+var gameId;
 
 function resizeCanvas() {
 	console.log("New Window:", window.innerWidth, window.innerHeight);
@@ -11,24 +11,24 @@ window.addEventListener('resize', resizeCanvas, false);
 Template.drawCanvas.onRendered(function() {
 	fabricCanvas = new fabric.Canvas('draw-canvas');
 
-	var latestCanvasState = CanvasStates.findOne({}, {
+	var latestGame = Games.findOne({}, {
 		sort: {
 			startTime: -1
 		}
 	});
 
-	if (!_.isUndefined(latestCanvasState)) {
-		fabricCanvas.loadFromJSON(latestCanvasState.state);
-		currentId = latestCanvasState._id;
+	if (!_.isUndefined(latestGame)) {
+		fabricCanvas.loadFromJSON(latestGame.state);
+		gameId = latestGame._id;
 	}
 	fabricCanvas.isDrawingMode = true;
 
 
-	if (_.isUndefined(latestCanvasState)) {
-		CanvasStates.insert({startTime: new Date()}, function(err, res) {
+	if (_.isUndefined(latestGame)) {
+		Games.insert({startTime: new Date()}, function(err, res) {
 			if (err) console.error(err);
 			else console.log(res);
-			currentId = res;
+			gameId = res;
 		});
 	}
 
@@ -37,8 +37,8 @@ Template.drawCanvas.onRendered(function() {
 			var state = fabricCanvas.toJSON();
 
 			// Here's where we update the collection
-			CanvasStates.update({
-				_id: currentId
+			Games.update({
+				_id: gameId
 			}, {
 				$set: {
 					state: state

@@ -1,7 +1,7 @@
-CanvasStates = new Mongo.Collection('canvasStates');
+Games = new Mongo.Collection('games');
 
 if (Meteor.isServer) {
-	CanvasStates.allow({
+	Games.allow({
 		insert: function() {
 			return true;
 		},
