@@ -1,10 +1,15 @@
 var fabricCanvas;
 
+function resizeCanvas() {
+	console.log("New Window:", window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', resizeCanvas, false);
+
+
 Template.drawCanvas.onRendered(function() {
-	var canvas = $("#draw-canvas");
 	fabricCanvas = new fabric.Canvas('draw-canvas', {
 		isDrawingMode: true
-	})
+	});
 })
 
 Template.drawCanvas.events({
