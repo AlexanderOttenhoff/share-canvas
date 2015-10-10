@@ -10,7 +10,7 @@ window.addEventListener('resize', resizeCanvas, false);
 
 Template.drawCanvas.onRendered(function() {
 	var template = this;
-	fabricCanvas = null;
+	var fabricCanvas = null;
 
 	this.autorun(()=> {
 		// This autorun will rerun whenever there is a new game made available
@@ -37,7 +37,7 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
 
 
-		var isDrawer = true; //currentGame.isDrawer();
+		var isDrawer = currentGame.isDrawer();
 
 		//Isolate the canvas state autorun form the parent autorun
 		Tracker.autorun(() => {
@@ -54,9 +54,8 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});
 
-		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
+		fabricCanvas.isDrawingMode = isDrawer;
 		fabricCanvas.freeDrawingBrush.width=5;
-		
 
 		fabricCanvas.on("mouse:move", function(e) {
 			if (e.e.buttons & 1) {

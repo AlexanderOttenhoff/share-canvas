@@ -16,6 +16,15 @@ class Game extends Record {
 		return Meteor.call('makeGuess', this._id, guess, callback);
 	}
 
+	winningGuess() {
+		return _.findWhere(this.guesses, {
+			isCorrect: true
+		});
+	}
+
+	drawer(options) {
+		Meteor.users.findOne(this.drawerId, options);
+	}
 }
 
 Meteor.methods({
@@ -73,19 +82,53 @@ Games.current = (options = {}) => {
 	}, options));
 };
 
-Games.startNewRound = (drawerId) => {
-	Games.update({endTime: {$exists: false}}, {
-		$set: {endTime: new Date()}
-	}, {multi: true});
-
-	var pool = ThingsToGuess.findOne();
-
-	Games.insert({
-		startTime: new Date(),
-		drawerId: drawerId,
-		solution: Random.choice(pool.movies)
-	});
+Games.getDrawer = (options) => {
+	var lastGame = Games.findOne({endTime: {$exists: true}}, {endTime: -1});
+	var winnerId = lastGame && lastGame.winningGuess().userId;
+	var query = {
+		'profile.activeAt': {$gte: new Date(Date.now() - 10000)}
+	};
+	return winnerId && Meteor.users.findOne(_.defaults({
+		_id: winnerId
+	}, query), options) || Meteor.users.findOne(query, options);
 };
+
+Games.startNewRound = () => {
+	var drawer = Games.getDrawer();
+
+	if (drawer) {
+		Games.update({endTime: {$exists: false}}, {
+			$set: {endTime: new Date()}
+		}, {multi: true});
+
+		var pool = ThingsToGuess.findOne();
+
+		return Games.insert({
+			startTime: new Date(),
+			drawerId: drawer._id,
+			solution: Random.choice(pool.movies)
+		});
+	}
+};
+
+
+// Start new rounds automatically when a drawer is available.
+Meteor.isServer && Meteor.setInterval(() => {
+	var currentGame = Games.current();
+
+	if (currentGame) {
+		// Check if the drawer of the game is still active
+
+		var drawer = currentGame.drawer();
+
+		if (drawer && drawer.activeAt < Date.now() - 10000) {
+			Games.startNewRound()
+		}
+	}
+	else {
+		Games.startNewRound()
+	}
+}, 10000);
 
 if (Meteor.isServer) {
 	Meteor.startup(() => {
