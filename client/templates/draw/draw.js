@@ -9,40 +9,45 @@ window.addEventListener('resize', resizeCanvas, false);
 
 
 Template.drawCanvas.onRendered(function() {
-	fabricCanvas = new fabric.Canvas('draw-canvas');
+	var template = this;
+	var fabricCanvas = null;
 
-	var latestGame = Games.current();
-
-	if (!_.isUndefined(latestGame)) {
-		fabricCanvas.loadFromJSON(latestGame.state);
-		gameId = latestGame._id;
-	}
-	fabricCanvas.isDrawingMode = true;
-
-
-	if (_.isUndefined(latestGame)) {
-		Games.insert({startTime: new Date()}, function(err, res) {
-			if (err) console.error(err);
-			else console.log(res);
-			gameId = res;
+	this.autorun(()=> {
+		var currentGame = Games.current({
+			fields: {
+				_id: 1
+			}
 		});
-	}
 
-	fabricCanvas.observe("mouse:move", function(e) {
-		if (e.e.buttons & 1) {
-			var state = fabricCanvas.toJSON();
+		var gameId = currentGame._id;
 
-			// Here's where we update the collection
-			Games.update({
-				_id: gameId
-			}, {
-				$set: {
-					state: state
-				}
-			}, function(err, res) {
-				if (err) console.error(err);
-				else console.log(res);
-			});
+		if (!currentGame) {
+			return;
 		}
+
+		if (!fabricCanvas)
+			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
+
+		fabricCanvas.loadFromJSON(currentGame.state);
+
+		fabricCanvas.isDrawingMode = true //currentGame.isDrawer();
+
+		fabricCanvas.on("mouse:move", function(e) {
+			if (e.e.buttons & 1) {
+				var state = fabricCanvas.toJSON();
+
+				// Here's where we update the collection
+				Games.update({
+					_id: gameId
+				}, {
+					$set: {
+						state: state
+					}
+				}, function(err, res) {
+					if (err) console.error(err);
+					else console.log(res);
+				});
+			}
+		});
 	});
 });
