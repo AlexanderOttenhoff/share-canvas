@@ -20,6 +20,9 @@ Template.chat_feed.helpers({
   },
   isOwnMessage(){
     return this.authorId === Meteor.userId();
+  },
+  countUsersOnline() {
+    return 4;
   }
 });
 
