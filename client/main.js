@@ -1,23 +1,14 @@
-if (Meteor.isClient) {
-  // counter starts at 0
-  Session.setDefault('counter', 0);
+var fabricCanvas;
 
-  Template.hello.helpers({
-    counter: function () {
-      return Session.get('counter');
-    }
-  });
+Template.drawCanvas.onRendered(function() {
+	var canvas = $("#draw-canvas");
+	fabricCanvas = new fabric.Canvas('draw-canvas', {
+		isDrawingMode: true
+	})
+})
 
-  Template.hello.events({
-    'click button': function () {
-      // increment the counter when button is clicked
-      Session.set('counter', Session.get('counter') + 1);
-    }
-  });
-}
+Template.drawCanvas.events({
+	'click #draw-canvas': function() {
 
-if (Meteor.isServer) {
-  Meteor.startup(function () {
-    // code to run on server at startup
-  });
-}
+	}
+})

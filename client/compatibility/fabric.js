@@ -1,4 +1,4 @@
-/* build: `node build.js modules=freedrawing,serialization minifier=uglifyjs` */
+/* build: `node build.js modules=freedrawing,interaction,serialization,node minifier=uglifyjs` */
 /*! Fabric.js Copyright 2008-2015, Printio (Juriy Zaytsev, Maxim Chernyak) */
 
 var fabric = fabric || { version: "1.5.0" };
@@ -6027,6 +6027,2099 @@ fabric.PatternBrush = fabric.util.createClass(fabric.PencilBrush, /** @lends fab
     return path;
   }
 });
+(function() {
+
+  var getPointer = fabric.util.getPointer,
+      degreesToRadians = fabric.util.degreesToRadians,
+      radiansToDegrees = fabric.util.radiansToDegrees,
+      atan2 = Math.atan2,
+      abs = Math.abs,
+
+      STROKE_OFFSET = 0.5;
+
+  /**
+   * Canvas class
+   * @class fabric.Canvas
+   * @extends fabric.StaticCanvas
+   * @tutorial {@link http://fabricjs.com/fabric-intro-part-1/#canvas}
+   * @see {@link fabric.Canvas#initialize} for constructor definition
+   *
+   * @fires object:modified
+   * @fires object:rotating
+   * @fires object:scaling
+   * @fires object:moving
+   * @fires object:selected
+   *
+   * @fires before:selection:cleared
+   * @fires selection:cleared
+   * @fires selection:created
+   *
+   * @fires path:created
+   * @fires mouse:down
+   * @fires mouse:move
+   * @fires mouse:up
+   * @fires mouse:over
+   * @fires mouse:out
+   *
+   */
+  fabric.Canvas = fabric.util.createClass(fabric.StaticCanvas, /** @lends fabric.Canvas.prototype */ {
+
+    /**
+     * Constructor
+     * @param {HTMLElement | String} el &lt;canvas> element to initialize instance on
+     * @param {Object} [options] Options object
+     * @return {Object} thisArg
+     */
+    initialize: function(el, options) {
+      options || (options = { });
+
+      this._initStatic(el, options);
+      this._initInteractive();
+      this._createCacheCanvas();
+
+      fabric.Canvas.activeInstance = this;
+    },
+
+    /**
+     * When true, objects can be transformed by one side (unproportionally)
+     * @type Boolean
+     * @default
+     */
+    uniScaleTransform:      false,
+
+    /**
+     * When true, objects use center point as the origin of scale transformation.
+     * <b>Backwards incompatibility note:</b> This property replaces "centerTransform" (Boolean).
+     * @since 1.3.4
+     * @type Boolean
+     * @default
+     */
+    centeredScaling:        false,
+
+    /**
+     * When true, objects use center point as the origin of rotate transformation.
+     * <b>Backwards incompatibility note:</b> This property replaces "centerTransform" (Boolean).
+     * @since 1.3.4
+     * @type Boolean
+     * @default
+     */
+    centeredRotation:       false,
+
+    /**
+     * Indicates that canvas is interactive. This property should not be changed.
+     * @type Boolean
+     * @default
+     */
+    interactive:            true,
+
+    /**
+     * Indicates whether group selection should be enabled
+     * @type Boolean
+     * @default
+     */
+    selection:              true,
+
+    /**
+     * Color of selection
+     * @type String
+     * @default
+     */
+    selectionColor:         'rgba(100, 100, 255, 0.3)', // blue
+
+    /**
+     * Default dash array pattern
+     * If not empty the selection border is dashed
+     * @type Array
+     */
+    selectionDashArray:     [ ],
+
+    /**
+     * Color of the border of selection (usually slightly darker than color of selection itself)
+     * @type String
+     * @default
+     */
+    selectionBorderColor:   'rgba(255, 255, 255, 0.3)',
+
+    /**
+     * Width of a line used in object/group selection
+     * @type Number
+     * @default
+     */
+    selectionLineWidth:     1,
+
+    /**
+     * Default cursor value used when hovering over an object on canvas
+     * @type String
+     * @default
+     */
+    hoverCursor:            'move',
+
+    /**
+     * Default cursor value used when moving an object on canvas
+     * @type String
+     * @default
+     */
+    moveCursor:             'move',
+
+    /**
+     * Default cursor value used for the entire canvas
+     * @type String
+     * @default
+     */
+    defaultCursor:          'default',
+
+    /**
+     * Cursor value used during free drawing
+     * @type String
+     * @default
+     */
+    freeDrawingCursor:      'crosshair',
+
+    /**
+     * Cursor value used for rotation point
+     * @type String
+     * @default
+     */
+    rotationCursor:         'crosshair',
+
+    /**
+     * Default element class that's given to wrapper (div) element of canvas
+     * @type String
+     * @default
+     */
+    containerClass:         'canvas-container',
+
+    /**
+     * When true, object detection happens on per-pixel basis rather than on per-bounding-box
+     * @type Boolean
+     * @default
+     */
+    perPixelTargetFind:     false,
+
+    /**
+     * Number of pixels around target pixel to tolerate (consider active) during object detection
+     * @type Number
+     * @default
+     */
+    targetFindTolerance:    0,
+
+    /**
+     * When true, target detection is skipped when hovering over canvas. This can be used to improve performance.
+     * @type Boolean
+     * @default
+     */
+    skipTargetFind:         false,
+
+    /**
+     * @private
+     */
+    _initInteractive: function() {
+      this._currentTransform = null;
+      this._groupSelector = null;
+      this._initWrapperElement();
+      this._createUpperCanvas();
+      this._initEventListeners();
+
+      this.freeDrawingBrush = fabric.PencilBrush && new fabric.PencilBrush(this);
+
+      this.calcOffset();
+    },
+
+    /**
+     * Resets the current transform to its original values and chooses the type of resizing based on the event
+     * @private
+     * @param {Event} e Event object fired on mousemove
+     */
+    _resetCurrentTransform: function(e) {
+      var t = this._currentTransform;
+
+      t.target.set({
+        scaleX: t.original.scaleX,
+        scaleY: t.original.scaleY,
+        left: t.original.left,
+        top: t.original.top
+      });
+
+      if (this._shouldCenterTransform(e, t.target)) {
+        if (t.action === 'rotate') {
+          this._setOriginToCenter(t.target);
+        }
+        else {
+          if (t.originX !== 'center') {
+            if (t.originX === 'right') {
+              t.mouseXSign = -1;
+            }
+            else {
+              t.mouseXSign = 1;
+            }
+          }
+          if (t.originY !== 'center') {
+            if (t.originY === 'bottom') {
+              t.mouseYSign = -1;
+            }
+            else {
+              t.mouseYSign = 1;
+            }
+          }
+
+          t.originX = 'center';
+          t.originY = 'center';
+        }
+      }
+      else {
+        t.originX = t.original.originX;
+        t.originY = t.original.originY;
+      }
+    },
+
+    /**
+     * Checks if point is contained within an area of given object
+     * @param {Event} e Event object
+     * @param {fabric.Object} target Object to test against
+     * @return {Boolean} true if point is contained within an area of given object
+     */
+    containsPoint: function (e, target) {
+      var pointer = this.getPointer(e, true),
+          xy = this._normalizePointer(target, pointer);
+
+      // http://www.geog.ubc.ca/courses/klink/gis.notes/ncgia/u32.html
+      // http://idav.ucdavis.edu/~okreylos/TAship/Spring2000/PointInPolygon.html
+      return (target.containsPoint(xy) || target._findTargetCorner(pointer));
+    },
+
+    /**
+     * @private
+     */
+    _normalizePointer: function (object, pointer) {
+      var activeGroup = this.getActiveGroup(),
+          x = pointer.x,
+          y = pointer.y,
+          isObjectInGroup = (
+            activeGroup &&
+            object.type !== 'group' &&
+            activeGroup.contains(object)),
+          lt;
+
+      if (isObjectInGroup) {
+        lt = new fabric.Point(activeGroup.left, activeGroup.top);
+        lt = fabric.util.transformPoint(lt, this.viewportTransform, true);
+        x -= lt.x;
+        y -= lt.y;
+      }
+      return { x: x, y: y };
+    },
+
+    /**
+     * Returns true if object is transparent at a certain location
+     * @param {fabric.Object} target Object to check
+     * @param {Number} x Left coordinate
+     * @param {Number} y Top coordinate
+     * @return {Boolean}
+     */
+    isTargetTransparent: function (target, x, y) {
+      var hasBorders = target.hasBorders,
+          transparentCorners = target.transparentCorners;
+
+      target.hasBorders = target.transparentCorners = false;
+
+      this._draw(this.contextCache, target);
+
+      target.hasBorders = hasBorders;
+      target.transparentCorners = transparentCorners;
+
+      var isTransparent = fabric.util.isTransparent(
+        this.contextCache, x, y, this.targetFindTolerance);
+
+      this.clearContext(this.contextCache);
+
+      return isTransparent;
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object
+     * @param {fabric.Object} target
+     */
+    _shouldClearSelection: function (e, target) {
+      var activeGroup = this.getActiveGroup(),
+          activeObject = this.getActiveObject();
+
+      return (
+        !target
+        ||
+        (target &&
+          activeGroup &&
+          !activeGroup.contains(target) &&
+          activeGroup !== target &&
+          !e.shiftKey)
+        ||
+        (target && !target.evented)
+        ||
+        (target &&
+          !target.selectable &&
+          activeObject &&
+          activeObject !== target)
+      );
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object
+     * @param {fabric.Object} target
+     */
+    _shouldCenterTransform: function (e, target) {
+      if (!target) {
+        return;
+      }
+
+      var t = this._currentTransform,
+          centerTransform;
+
+      if (t.action === 'scale' || t.action === 'scaleX' || t.action === 'scaleY') {
+        centerTransform = this.centeredScaling || target.centeredScaling;
+      }
+      else if (t.action === 'rotate') {
+        centerTransform = this.centeredRotation || target.centeredRotation;
+      }
+
+      return centerTransform ? !e.altKey : e.altKey;
+    },
+
+    /**
+     * @private
+     */
+    _getOriginFromCorner: function(target, corner) {
+      var origin = {
+        x: target.originX,
+        y: target.originY
+      };
+
+      if (corner === 'ml' || corner === 'tl' || corner === 'bl') {
+        origin.x = 'right';
+      }
+      else if (corner === 'mr' || corner === 'tr' || corner === 'br') {
+        origin.x = 'left';
+      }
+
+      if (corner === 'tl' || corner === 'mt' || corner === 'tr') {
+        origin.y = 'bottom';
+      }
+      else if (corner === 'bl' || corner === 'mb' || corner === 'br') {
+        origin.y = 'top';
+      }
+
+      return origin;
+    },
+
+    /**
+     * @private
+     */
+    _getActionFromCorner: function(target, corner) {
+      var action = 'drag';
+      if (corner) {
+        action = (corner === 'ml' || corner === 'mr')
+          ? 'scaleX'
+          : (corner === 'mt' || corner === 'mb')
+            ? 'scaleY'
+            : corner === 'mtr'
+              ? 'rotate'
+              : 'scale';
+      }
+      return action;
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object
+     * @param {fabric.Object} target
+     */
+    _setupCurrentTransform: function (e, target) {
+      if (!target) {
+        return;
+      }
+
+      var pointer = this.getPointer(e),
+          corner = target._findTargetCorner(this.getPointer(e, true)),
+          action = this._getActionFromCorner(target, corner),
+          origin = this._getOriginFromCorner(target, corner);
+
+      this._currentTransform = {
+        target: target,
+        action: action,
+        scaleX: target.scaleX,
+        scaleY: target.scaleY,
+        offsetX: pointer.x - target.left,
+        offsetY: pointer.y - target.top,
+        originX: origin.x,
+        originY: origin.y,
+        ex: pointer.x,
+        ey: pointer.y,
+        left: target.left,
+        top: target.top,
+        theta: degreesToRadians(target.angle),
+        width: target.width * target.scaleX,
+        mouseXSign: 1,
+        mouseYSign: 1
+      };
+
+      this._currentTransform.original = {
+        left: target.left,
+        top: target.top,
+        scaleX: target.scaleX,
+        scaleY: target.scaleY,
+        originX: origin.x,
+        originY: origin.y
+      };
+
+      this._resetCurrentTransform(e);
+    },
+
+    /**
+     * Translates object by "setting" its left/top
+     * @private
+     * @param {Number} x pointer's x coordinate
+     * @param {Number} y pointer's y coordinate
+     */
+    _translateObject: function (x, y) {
+      var target = this._currentTransform.target;
+
+      if (!target.get('lockMovementX')) {
+        target.set('left', x - this._currentTransform.offsetX);
+      }
+      if (!target.get('lockMovementY')) {
+        target.set('top', y - this._currentTransform.offsetY);
+      }
+    },
+
+    /**
+     * Scales object by invoking its scaleX/scaleY methods
+     * @private
+     * @param {Number} x pointer's x coordinate
+     * @param {Number} y pointer's y coordinate
+     * @param {String} by Either 'x' or 'y' - specifies dimension constraint by which to scale an object.
+     *                    When not provided, an object is scaled by both dimensions equally
+     */
+    _scaleObject: function (x, y, by) {
+      var t = this._currentTransform,
+          target = t.target,
+          lockScalingX = target.get('lockScalingX'),
+          lockScalingY = target.get('lockScalingY'),
+          lockScalingFlip = target.get('lockScalingFlip');
+
+      if (lockScalingX && lockScalingY) {
+        return;
+      }
+
+      // Get the constraint point
+      var constraintPosition = target.translateToOriginPoint(target.getCenterPoint(), t.originX, t.originY),
+          localMouse = target.toLocalPoint(new fabric.Point(x, y), t.originX, t.originY);
+
+      this._setLocalMouse(localMouse, t);
+
+      // Actually scale the object
+      this._setObjectScale(localMouse, t, lockScalingX, lockScalingY, by, lockScalingFlip);
+
+      // Make sure the constraints apply
+      target.setPositionByOrigin(constraintPosition, t.originX, t.originY);
+    },
+
+    /**
+     * @private
+     */
+    _setObjectScale: function(localMouse, transform, lockScalingX, lockScalingY, by, lockScalingFlip) {
+      var target = transform.target, forbidScalingX = false, forbidScalingY = false,
+          strokeWidth = target.stroke ? target.strokeWidth : 0;
+
+      transform.newScaleX = localMouse.x / (target.width + strokeWidth / 2);
+      transform.newScaleY = localMouse.y / (target.height + strokeWidth / 2);
+
+      if (lockScalingFlip && transform.newScaleX <= 0 && transform.newScaleX < target.scaleX) {
+        forbidScalingX = true;
+      }
+
+      if (lockScalingFlip && transform.newScaleY <= 0 && transform.newScaleY < target.scaleY) {
+        forbidScalingY = true;
+      }
+
+      if (by === 'equally' && !lockScalingX && !lockScalingY) {
+        forbidScalingX || forbidScalingY || this._scaleObjectEqually(localMouse, target, transform);
+      }
+      else if (!by) {
+        forbidScalingX || lockScalingX || target.set('scaleX', transform.newScaleX);
+        forbidScalingY || lockScalingY || target.set('scaleY', transform.newScaleY);
+      }
+      else if (by === 'x' && !target.get('lockUniScaling')) {
+        forbidScalingX || lockScalingX || target.set('scaleX', transform.newScaleX);
+      }
+      else if (by === 'y' && !target.get('lockUniScaling')) {
+        forbidScalingY || lockScalingY || target.set('scaleY', transform.newScaleY);
+      }
+
+      forbidScalingX || forbidScalingY || this._flipObject(transform, by);
+
+    },
+
+    /**
+     * @private
+     */
+    _scaleObjectEqually: function(localMouse, target, transform) {
+
+      var dist = localMouse.y + localMouse.x,
+          strokeWidth = target.stroke ? target.strokeWidth : 0,
+          lastDist = (target.height + (strokeWidth / 2)) * transform.original.scaleY +
+                     (target.width + (strokeWidth / 2)) * transform.original.scaleX;
+
+      // We use transform.scaleX/Y instead of target.scaleX/Y
+      // because the object may have a min scale and we'll loose the proportions
+      transform.newScaleX = transform.original.scaleX * dist / lastDist;
+      transform.newScaleY = transform.original.scaleY * dist / lastDist;
+
+      target.set('scaleX', transform.newScaleX);
+      target.set('scaleY', transform.newScaleY);
+    },
+
+    /**
+     * @private
+     */
+    _flipObject: function(transform, by) {
+      if (transform.newScaleX < 0 && by !== 'y') {
+        if (transform.originX === 'left') {
+          transform.originX = 'right';
+        }
+        else if (transform.originX === 'right') {
+          transform.originX = 'left';
+        }
+      }
+
+      if (transform.newScaleY < 0 && by !== 'x') {
+        if (transform.originY === 'top') {
+          transform.originY = 'bottom';
+        }
+        else if (transform.originY === 'bottom') {
+          transform.originY = 'top';
+        }
+      }
+    },
+
+    /**
+     * @private
+     */
+    _setLocalMouse: function(localMouse, t) {
+      var target = t.target;
+
+      if (t.originX === 'right') {
+        localMouse.x *= -1;
+      }
+      else if (t.originX === 'center') {
+        localMouse.x *= t.mouseXSign * 2;
+
+        if (localMouse.x < 0) {
+          t.mouseXSign = -t.mouseXSign;
+        }
+      }
+
+      if (t.originY === 'bottom') {
+        localMouse.y *= -1;
+      }
+      else if (t.originY === 'center') {
+        localMouse.y *= t.mouseYSign * 2;
+
+        if (localMouse.y < 0) {
+          t.mouseYSign = -t.mouseYSign;
+        }
+      }
+
+      // adjust the mouse coordinates when dealing with padding
+      if (abs(localMouse.x) > target.padding) {
+        if (localMouse.x < 0) {
+          localMouse.x += target.padding;
+        }
+        else {
+          localMouse.x -= target.padding;
+        }
+      }
+      else { // mouse is within the padding, set to 0
+        localMouse.x = 0;
+      }
+
+      if (abs(localMouse.y) > target.padding) {
+        if (localMouse.y < 0) {
+          localMouse.y += target.padding;
+        }
+        else {
+          localMouse.y -= target.padding;
+        }
+      }
+      else {
+        localMouse.y = 0;
+      }
+    },
+
+    /**
+     * Rotates object by invoking its rotate method
+     * @private
+     * @param {Number} x pointer's x coordinate
+     * @param {Number} y pointer's y coordinate
+     */
+    _rotateObject: function (x, y) {
+
+      var t = this._currentTransform;
+
+      if (t.target.get('lockRotation')) {
+        return;
+      }
+
+      var lastAngle = atan2(t.ey - t.top, t.ex - t.left),
+          curAngle = atan2(y - t.top, x - t.left),
+          angle = radiansToDegrees(curAngle - lastAngle + t.theta);
+
+      // normalize angle to positive value
+      if (angle < 0) {
+        angle = 360 + angle;
+      }
+
+      t.target.angle = angle % 360;
+    },
+
+    /**
+     * Set the cursor type of the canvas element
+     * @param {String} value Cursor type of the canvas element.
+     * @see http://www.w3.org/TR/css3-ui/#cursor
+     */
+    setCursor: function (value) {
+      this.upperCanvasEl.style.cursor = value;
+    },
+
+    /**
+     * @private
+     */
+    _resetObjectTransform: function (target) {
+      target.scaleX = 1;
+      target.scaleY = 1;
+      target.setAngle(0);
+    },
+
+    /**
+     * @private
+     */
+    _drawSelection: function () {
+      var ctx = this.contextTop,
+          groupSelector = this._groupSelector,
+          left = groupSelector.left,
+          top = groupSelector.top,
+          aleft = abs(left),
+          atop = abs(top);
+
+      ctx.fillStyle = this.selectionColor;
+
+      ctx.fillRect(
+        groupSelector.ex - ((left > 0) ? 0 : -left),
+        groupSelector.ey - ((top > 0) ? 0 : -top),
+        aleft,
+        atop
+      );
+
+      ctx.lineWidth = this.selectionLineWidth;
+      ctx.strokeStyle = this.selectionBorderColor;
+
+      // selection border
+      if (this.selectionDashArray.length > 1) {
+
+        var px = groupSelector.ex + STROKE_OFFSET - ((left > 0) ? 0: aleft),
+            py = groupSelector.ey + STROKE_OFFSET - ((top > 0) ? 0: atop);
+
+        ctx.beginPath();
+
+        fabric.util.drawDashedLine(ctx, px, py, px + aleft, py, this.selectionDashArray);
+        fabric.util.drawDashedLine(ctx, px, py + atop - 1, px + aleft, py + atop - 1, this.selectionDashArray);
+        fabric.util.drawDashedLine(ctx, px, py, px, py + atop, this.selectionDashArray);
+        fabric.util.drawDashedLine(ctx, px + aleft - 1, py, px + aleft - 1, py + atop, this.selectionDashArray);
+
+        ctx.closePath();
+        ctx.stroke();
+      }
+      else {
+        ctx.strokeRect(
+          groupSelector.ex + STROKE_OFFSET - ((left > 0) ? 0 : aleft),
+          groupSelector.ey + STROKE_OFFSET - ((top > 0) ? 0 : atop),
+          aleft,
+          atop
+        );
+      }
+    },
+
+    /**
+     * @private
+     */
+    _isLastRenderedObject: function(e) {
+      return (
+        this.controlsAboveOverlay &&
+        this.lastRenderedObjectWithControlsAboveOverlay &&
+        this.lastRenderedObjectWithControlsAboveOverlay.visible &&
+        this.containsPoint(e, this.lastRenderedObjectWithControlsAboveOverlay) &&
+        this.lastRenderedObjectWithControlsAboveOverlay._findTargetCorner(this.getPointer(e, true)));
+    },
+
+    /**
+     * Method that determines what object we are clicking on
+     * @param {Event} e mouse event
+     * @param {Boolean} skipGroup when true, group is skipped and only objects are traversed through
+     */
+    findTarget: function (e, skipGroup) {
+      if (this.skipTargetFind) {
+        return;
+      }
+
+      if (this._isLastRenderedObject(e)) {
+        return this.lastRenderedObjectWithControlsAboveOverlay;
+      }
+
+      // first check current group (if one exists)
+      var activeGroup = this.getActiveGroup();
+      if (activeGroup && !skipGroup && this.containsPoint(e, activeGroup)) {
+        return activeGroup;
+      }
+
+      var target = this._searchPossibleTargets(e);
+      this._fireOverOutEvents(target);
+
+      return target;
+    },
+
+    /**
+     * @private
+     */
+    _fireOverOutEvents: function(target) {
+      if (target) {
+        if (this._hoveredTarget !== target) {
+          this.fire('mouse:over', { target: target });
+          target.fire('mouseover');
+          if (this._hoveredTarget) {
+            this.fire('mouse:out', { target: this._hoveredTarget });
+            this._hoveredTarget.fire('mouseout');
+          }
+          this._hoveredTarget = target;
+        }
+      }
+      else if (this._hoveredTarget) {
+        this.fire('mouse:out', { target: this._hoveredTarget });
+        this._hoveredTarget.fire('mouseout');
+        this._hoveredTarget = null;
+      }
+    },
+
+    /**
+    * @private
+    */
+    _checkTarget: function(e, obj, pointer) {
+      if (obj &&
+          obj.visible &&
+          obj.evented &&
+          this.containsPoint(e, obj)){
+        if ((this.perPixelTargetFind || obj.perPixelTargetFind) && !obj.isEditing) {
+          var isTransparent = this.isTargetTransparent(obj, pointer.x, pointer.y);
+          if (!isTransparent) {
+            return true;
+          }
+        }
+        else {
+          return true;
+        }
+      }
+    },
+
+    /**
+     * @private
+     */
+    _searchPossibleTargets: function(e) {
+
+      // Cache all targets where their bounding box contains point.
+      var target,
+          pointer = this.getPointer(e, true),
+          i = this._objects.length;
+      // Do not check for currently grouped objects, since we check the parent group itself.
+      while (i--) {
+        if (!this._objects[i].group && this._checkTarget(e, this._objects[i], pointer)){
+          this.relatedTarget = this._objects[i];
+          target = this._objects[i];
+          break;
+        }
+      }
+
+      return target;
+    },
+
+    /**
+     * Returns pointer coordinates relative to canvas.
+     * @param {Event} e
+     * @return {Object} object with "x" and "y" number values
+     */
+    getPointer: function (e, ignoreZoom, upperCanvasEl) {
+      if (!upperCanvasEl) {
+        upperCanvasEl = this.upperCanvasEl;
+      }
+      var pointer = getPointer(e, upperCanvasEl),
+          bounds = upperCanvasEl.getBoundingClientRect(),
+          boundsWidth = bounds.width || 0,
+          boundsHeight = bounds.height || 0,
+          cssScale;
+
+      if (!boundsWidth || !boundsHeight ) {
+        if ('top' in bounds && 'bottom' in bounds) {
+          boundsHeight = Math.abs( bounds.top - bounds.bottom );
+        }
+        if ('right' in bounds && 'left' in bounds) {
+          boundsWidth = Math.abs( bounds.right - bounds.left );
+        }
+      }
+
+      this.calcOffset();
+
+      pointer.x = pointer.x - this._offset.left;
+      pointer.y = pointer.y - this._offset.top;
+      if (!ignoreZoom) {
+        pointer = fabric.util.transformPoint(
+          pointer,
+          fabric.util.invertTransform(this.viewportTransform)
+        );
+      }
+
+      if (boundsWidth === 0 || boundsHeight === 0) {
+        // If bounds are not available (i.e. not visible), do not apply scale.
+        cssScale = { width: 1, height: 1 };
+      }
+      else {
+        cssScale = {
+          width: upperCanvasEl.width / boundsWidth,
+          height: upperCanvasEl.height / boundsHeight
+        };
+      }
+
+      return {
+        x: pointer.x * cssScale.width,
+        y: pointer.y * cssScale.height
+      };
+    },
+
+    /**
+     * @private
+     * @throws {CANVAS_INIT_ERROR} If canvas can not be initialized
+     */
+    _createUpperCanvas: function () {
+      var lowerCanvasClass = this.lowerCanvasEl.className.replace(/\s*lower-canvas\s*/, '');
+
+      this.upperCanvasEl = this._createCanvasElement();
+      fabric.util.addClass(this.upperCanvasEl, 'upper-canvas ' + lowerCanvasClass);
+
+      this.wrapperEl.appendChild(this.upperCanvasEl);
+
+      this._copyCanvasStyle(this.lowerCanvasEl, this.upperCanvasEl);
+      this._applyCanvasStyle(this.upperCanvasEl);
+      this.contextTop = this.upperCanvasEl.getContext('2d');
+    },
+
+    /**
+     * @private
+     */
+    _createCacheCanvas: function () {
+      this.cacheCanvasEl = this._createCanvasElement();
+      this.cacheCanvasEl.setAttribute('width', this.width);
+      this.cacheCanvasEl.setAttribute('height', this.height);
+      this.contextCache = this.cacheCanvasEl.getContext('2d');
+    },
+
+    /**
+     * @private
+     */
+    _initWrapperElement: function () {
+      this.wrapperEl = fabric.util.wrapElement(this.lowerCanvasEl, 'div', {
+        'class': this.containerClass
+      });
+      fabric.util.setStyle(this.wrapperEl, {
+        width: this.getWidth() + 'px',
+        height: this.getHeight() + 'px',
+        position: 'relative'
+      });
+      fabric.util.makeElementUnselectable(this.wrapperEl);
+    },
+
+    /**
+     * @private
+     * @param {HTMLElement} element canvas element to apply styles on
+     */
+    _applyCanvasStyle: function (element) {
+      var width = this.getWidth() || element.width,
+          height = this.getHeight() || element.height;
+
+      fabric.util.setStyle(element, {
+        position: 'absolute',
+        width: width + 'px',
+        height: height + 'px',
+        left: 0,
+        top: 0
+      });
+      element.width = width;
+      element.height = height;
+      fabric.util.makeElementUnselectable(element);
+    },
+
+    /**
+     * Copys the the entire inline style from one element (fromEl) to another (toEl)
+     * @private
+     * @param {Element} fromEl Element style is copied from
+     * @param {Element} toEl Element copied style is applied to
+     */
+    _copyCanvasStyle: function (fromEl, toEl) {
+      toEl.style.cssText = fromEl.style.cssText;
+    },
+
+    /**
+     * Returns context of canvas where object selection is drawn
+     * @return {CanvasRenderingContext2D}
+     */
+    getSelectionContext: function() {
+      return this.contextTop;
+    },
+
+    /**
+     * Returns &lt;canvas> element on which object selection is drawn
+     * @return {HTMLCanvasElement}
+     */
+    getSelectionElement: function () {
+      return this.upperCanvasEl;
+    },
+
+    /**
+     * @private
+     * @param {Object} object
+     */
+    _setActiveObject: function(object) {
+      if (this._activeObject) {
+        this._activeObject.set('active', false);
+      }
+      this._activeObject = object;
+      object.set('active', true);
+    },
+
+    /**
+     * Sets given object as the only active object on canvas
+     * @param {fabric.Object} object Object to set as an active one
+     * @param {Event} [e] Event (passed along when firing "object:selected")
+     * @return {fabric.Canvas} thisArg
+     * @chainable
+     */
+    setActiveObject: function (object, e) {
+      this._setActiveObject(object);
+      this.renderAll();
+      this.fire('object:selected', { target: object, e: e });
+      object.fire('selected', { e: e });
+      return this;
+    },
+
+    /**
+     * Returns currently active object
+     * @return {fabric.Object} active object
+     */
+    getActiveObject: function () {
+      return this._activeObject;
+    },
+
+    /**
+     * @private
+     */
+    _discardActiveObject: function() {
+      if (this._activeObject) {
+        this._activeObject.set('active', false);
+      }
+      this._activeObject = null;
+    },
+
+    /**
+     * Discards currently active object
+     * @return {fabric.Canvas} thisArg
+     * @chainable
+     */
+    discardActiveObject: function (e) {
+      this._discardActiveObject();
+      this.renderAll();
+      this.fire('selection:cleared', { e: e });
+      return this;
+    },
+
+    /**
+     * @private
+     * @param {fabric.Group} group
+     */
+    _setActiveGroup: function(group) {
+      this._activeGroup = group;
+      if (group) {
+        group.set('active', true);
+      }
+    },
+
+    /**
+     * Sets active group to a speicified one
+     * @param {fabric.Group} group Group to set as a current one
+     * @return {fabric.Canvas} thisArg
+     * @chainable
+     */
+    setActiveGroup: function (group, e) {
+      this._setActiveGroup(group);
+      if (group) {
+        this.fire('object:selected', { target: group, e: e });
+        group.fire('selected', { e: e });
+      }
+      return this;
+    },
+
+    /**
+     * Returns currently active group
+     * @return {fabric.Group} Current group
+     */
+    getActiveGroup: function () {
+      return this._activeGroup;
+    },
+
+    /**
+     * @private
+     */
+    _discardActiveGroup: function() {
+      var g = this.getActiveGroup();
+      if (g) {
+        g.destroy();
+      }
+      this.setActiveGroup(null);
+    },
+
+    /**
+     * Discards currently active group
+     * @return {fabric.Canvas} thisArg
+     */
+    discardActiveGroup: function (e) {
+      this._discardActiveGroup();
+      this.fire('selection:cleared', { e: e });
+      return this;
+    },
+
+    /**
+     * Deactivates all objects on canvas, removing any active group or object
+     * @return {fabric.Canvas} thisArg
+     */
+    deactivateAll: function () {
+      var allObjects = this.getObjects(),
+          i = 0,
+          len = allObjects.length;
+      for ( ; i < len; i++) {
+        allObjects[i].set('active', false);
+      }
+      this._discardActiveGroup();
+      this._discardActiveObject();
+      return this;
+    },
+
+    /**
+     * Deactivates all objects and dispatches appropriate events
+     * @return {fabric.Canvas} thisArg
+     */
+    deactivateAllWithDispatch: function (e) {
+      var activeObject = this.getActiveGroup() || this.getActiveObject();
+      if (activeObject) {
+        this.fire('before:selection:cleared', { target: activeObject, e: e });
+      }
+      this.deactivateAll();
+      if (activeObject) {
+        this.fire('selection:cleared', { e: e });
+      }
+      return this;
+    },
+
+    /**
+     * Draws objects' controls (borders/controls)
+     * @param {CanvasRenderingContext2D} ctx Context to render controls on
+     */
+    drawControls: function(ctx) {
+      var activeGroup = this.getActiveGroup();
+      if (activeGroup) {
+        this._drawGroupControls(ctx, activeGroup);
+      }
+      else {
+        this._drawObjectsControls(ctx);
+      }
+    },
+
+    /**
+     * @private
+     */
+    _drawGroupControls: function(ctx, activeGroup) {
+      activeGroup._renderControls(ctx);
+    },
+
+    /**
+     * @private
+     */
+    _drawObjectsControls: function(ctx) {
+      for (var i = 0, len = this._objects.length; i < len; ++i) {
+        if (!this._objects[i] || !this._objects[i].active) {
+          continue;
+        }
+        this._objects[i]._renderControls(ctx);
+        this.lastRenderedObjectWithControlsAboveOverlay = this._objects[i];
+      }
+    }
+  });
+
+  // copying static properties manually to work around Opera's bug,
+  // where "prototype" property is enumerable and overrides existing prototype
+  for (var prop in fabric.StaticCanvas) {
+    if (prop !== 'prototype') {
+      fabric.Canvas[prop] = fabric.StaticCanvas[prop];
+    }
+  }
+
+  if (fabric.isTouchSupported) {
+    /** @ignore */
+    fabric.Canvas.prototype._setCursorFromEvent = function() { };
+  }
+
+  /**
+   * @class fabric.Element
+   * @alias fabric.Canvas
+   * @deprecated Use {@link fabric.Canvas} instead.
+   * @constructor
+   */
+  fabric.Element = fabric.Canvas;
+})();
+(function() {
+
+  var cursorOffset = {
+    mt: 0, // n
+    tr: 1, // ne
+    mr: 2, // e
+    br: 3, // se
+    mb: 4, // s
+    bl: 5, // sw
+    ml: 6, // w
+    tl: 7 // nw
+  },
+  addListener = fabric.util.addListener,
+  removeListener = fabric.util.removeListener;
+
+  fabric.util.object.extend(fabric.Canvas.prototype, /** @lends fabric.Canvas.prototype */ {
+
+    /**
+     * Map of cursor style values for each of the object controls
+     * @private
+     */
+    cursorMap: [
+      'n-resize',
+      'ne-resize',
+      'e-resize',
+      'se-resize',
+      's-resize',
+      'sw-resize',
+      'w-resize',
+      'nw-resize'
+    ],
+
+    /**
+     * Adds mouse listeners to canvas
+     * @private
+     */
+    _initEventListeners: function () {
+
+      this._bindEvents();
+
+      addListener(fabric.window, 'resize', this._onResize);
+
+      // mouse events
+      addListener(this.upperCanvasEl, 'mousedown', this._onMouseDown);
+      addListener(this.upperCanvasEl, 'mousemove', this._onMouseMove);
+      addListener(this.upperCanvasEl, 'mousewheel', this._onMouseWheel);
+
+      // touch events
+      addListener(this.upperCanvasEl, 'touchstart', this._onMouseDown);
+      addListener(this.upperCanvasEl, 'touchmove', this._onMouseMove);
+
+      if (typeof eventjs !== 'undefined' && 'add' in eventjs) {
+        eventjs.add(this.upperCanvasEl, 'gesture', this._onGesture);
+        eventjs.add(this.upperCanvasEl, 'drag', this._onDrag);
+        eventjs.add(this.upperCanvasEl, 'orientation', this._onOrientationChange);
+        eventjs.add(this.upperCanvasEl, 'shake', this._onShake);
+        eventjs.add(this.upperCanvasEl, 'longpress', this._onLongPress);
+      }
+    },
+
+    /**
+     * @private
+     */
+    _bindEvents: function() {
+      this._onMouseDown = this._onMouseDown.bind(this);
+      this._onMouseMove = this._onMouseMove.bind(this);
+      this._onMouseUp = this._onMouseUp.bind(this);
+      this._onResize = this._onResize.bind(this);
+      this._onGesture = this._onGesture.bind(this);
+      this._onDrag = this._onDrag.bind(this);
+      this._onShake = this._onShake.bind(this);
+      this._onLongPress = this._onLongPress.bind(this);
+      this._onOrientationChange = this._onOrientationChange.bind(this);
+      this._onMouseWheel = this._onMouseWheel.bind(this);
+    },
+
+    /**
+     * Removes all event listeners
+     */
+    removeListeners: function() {
+      removeListener(fabric.window, 'resize', this._onResize);
+
+      removeListener(this.upperCanvasEl, 'mousedown', this._onMouseDown);
+      removeListener(this.upperCanvasEl, 'mousemove', this._onMouseMove);
+      removeListener(this.upperCanvasEl, 'mousewheel', this._onMouseWheel);
+
+      removeListener(this.upperCanvasEl, 'touchstart', this._onMouseDown);
+      removeListener(this.upperCanvasEl, 'touchmove', this._onMouseMove);
+
+      if (typeof eventjs !== 'undefined' && 'remove' in eventjs) {
+        eventjs.remove(this.upperCanvasEl, 'gesture', this._onGesture);
+        eventjs.remove(this.upperCanvasEl, 'drag', this._onDrag);
+        eventjs.remove(this.upperCanvasEl, 'orientation', this._onOrientationChange);
+        eventjs.remove(this.upperCanvasEl, 'shake', this._onShake);
+        eventjs.remove(this.upperCanvasEl, 'longpress', this._onLongPress);
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js gesture
+     * @param {Event} [self] Inner Event object
+     */
+    _onGesture: function(e, self) {
+      this.__onTransformGesture && this.__onTransformGesture(e, self);
+    },
+
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js drag
+     * @param {Event} [self] Inner Event object
+     */
+    _onDrag: function(e, self) {
+      this.__onDrag && this.__onDrag(e, self);
+    },
+
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js wheel event
+     * @param {Event} [self] Inner Event object
+     */
+    _onMouseWheel: function(e, self) {
+      this.__onMouseWheel && this.__onMouseWheel(e, self);
+    },
+
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js orientation change
+     * @param {Event} [self] Inner Event object
+     */
+    _onOrientationChange: function(e, self) {
+      this.__onOrientationChange && this.__onOrientationChange(e, self);
+    },
+
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js shake
+     * @param {Event} [self] Inner Event object
+     */
+    _onShake: function(e, self) {
+      this.__onShake && this.__onShake(e, self);
+    },
+    /**
+     * @private
+     * @param {Event} [e] Event object fired on Event.js shake
+     * @param {Event} [self] Inner Event object
+     */
+    _onLongPress: function(e, self) {
+      this.__onLongPress && this.__onLongPress(e, self);
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mousedown
+     */
+    _onMouseDown: function (e) {
+      this.__onMouseDown(e);
+
+      addListener(fabric.document, 'touchend', this._onMouseUp);
+      addListener(fabric.document, 'touchmove', this._onMouseMove);
+
+      removeListener(this.upperCanvasEl, 'mousemove', this._onMouseMove);
+      removeListener(this.upperCanvasEl, 'touchmove', this._onMouseMove);
+
+      if (e.type === 'touchstart') {
+        // Unbind mousedown to prevent double triggers from touch devices
+        removeListener(this.upperCanvasEl, 'mousedown', this._onMouseDown);
+      }
+      else {
+        addListener(fabric.document, 'mouseup', this._onMouseUp);
+        addListener(fabric.document, 'mousemove', this._onMouseMove);
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mouseup
+     */
+    _onMouseUp: function (e) {
+      this.__onMouseUp(e);
+
+      removeListener(fabric.document, 'mouseup', this._onMouseUp);
+      removeListener(fabric.document, 'touchend', this._onMouseUp);
+
+      removeListener(fabric.document, 'mousemove', this._onMouseMove);
+      removeListener(fabric.document, 'touchmove', this._onMouseMove);
+
+      addListener(this.upperCanvasEl, 'mousemove', this._onMouseMove);
+      addListener(this.upperCanvasEl, 'touchmove', this._onMouseMove);
+
+      if (e.type === 'touchend') {
+        // Wait 400ms before rebinding mousedown to prevent double triggers
+        // from touch devices
+        var _this = this;
+        setTimeout(function() {
+          addListener(_this.upperCanvasEl, 'mousedown', _this._onMouseDown);
+        }, 400);
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mousemove
+     */
+    _onMouseMove: function (e) {
+      !this.allowTouchScrolling && e.preventDefault && e.preventDefault();
+      this.__onMouseMove(e);
+    },
+
+    /**
+     * @private
+     */
+    _onResize: function () {
+      this.calcOffset();
+    },
+
+    /**
+     * Decides whether the canvas should be redrawn in mouseup and mousedown events.
+     * @private
+     * @param {Object} target
+     * @param {Object} pointer
+     */
+    _shouldRender: function(target, pointer) {
+      var activeObject = this.getActiveGroup() || this.getActiveObject();
+
+      return !!(
+        (target && (
+          target.isMoving ||
+          target !== activeObject))
+        ||
+        (!target && !!activeObject)
+        ||
+        (!target && !activeObject && !this._groupSelector)
+        ||
+        (pointer &&
+          this._previousPointer &&
+          this.selection && (
+          pointer.x !== this._previousPointer.x ||
+          pointer.y !== this._previousPointer.y))
+      );
+    },
+
+    /**
+     * Method that defines the actions when mouse is released on canvas.
+     * The method resets the currentTransform parameters, store the image corner
+     * position in the image object and render the canvas on top.
+     * @private
+     * @param {Event} e Event object fired on mouseup
+     */
+    __onMouseUp: function (e) {
+      var target;
+
+      if (this.isDrawingMode && this._isCurrentlyDrawing) {
+        this._onMouseUpInDrawingMode(e);
+        return;
+      }
+
+      if (this._currentTransform) {
+        this._finalizeCurrentTransform();
+        target = this._currentTransform.target;
+      }
+      else {
+        target = this.findTarget(e, true);
+      }
+
+      var shouldRender = this._shouldRender(target, this.getPointer(e));
+
+      this._maybeGroupObjects(e);
+
+      if (target) {
+        target.isMoving = false;
+      }
+
+      shouldRender && this.renderAll();
+
+      this._handleCursorAndEvent(e, target);
+    },
+
+    _handleCursorAndEvent: function(e, target) {
+      this._setCursorFromEvent(e, target);
+
+      // TODO: why are we doing this?
+      var _this = this;
+      setTimeout(function () {
+        _this._setCursorFromEvent(e, target);
+      }, 50);
+
+      this.fire('mouse:up', { target: target, e: e });
+      target && target.fire('mouseup', { e: e });
+    },
+
+    /**
+     * @private
+     */
+    _finalizeCurrentTransform: function() {
+
+      var transform = this._currentTransform,
+          target = transform.target;
+
+      if (target._scaling) {
+        target._scaling = false;
+      }
+
+      target.setCoords();
+
+      // only fire :modified event if target coordinates were changed during mousedown-mouseup
+      if (this.stateful && target.hasStateChanged()) {
+        this.fire('object:modified', { target: target });
+        target.fire('modified');
+      }
+
+      this._restoreOriginXY(target);
+    },
+
+    /**
+     * @private
+     * @param {Object} target Object to restore
+     */
+    _restoreOriginXY: function(target) {
+      if (this._previousOriginX && this._previousOriginY) {
+
+        var originPoint = target.translateToOriginPoint(
+          target.getCenterPoint(),
+          this._previousOriginX,
+          this._previousOriginY);
+
+        target.originX = this._previousOriginX;
+        target.originY = this._previousOriginY;
+
+        target.left = originPoint.x;
+        target.top = originPoint.y;
+
+        this._previousOriginX = null;
+        this._previousOriginY = null;
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mousedown
+     */
+    _onMouseDownInDrawingMode: function(e) {
+      this._isCurrentlyDrawing = true;
+      this.discardActiveObject(e).renderAll();
+      if (this.clipTo) {
+        fabric.util.clipContext(this, this.contextTop);
+      }
+      var ivt = fabric.util.invertTransform(this.viewportTransform),
+          pointer = fabric.util.transformPoint(this.getPointer(e, true), ivt);
+      this.freeDrawingBrush.onMouseDown(pointer);
+      this.fire('mouse:down', { e: e });
+
+      var target = this.findTarget(e);
+      if (typeof target !== 'undefined') {
+        target.fire('mousedown', { e: e, target: target });
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mousemove
+     */
+    _onMouseMoveInDrawingMode: function(e) {
+      if (this._isCurrentlyDrawing) {
+        var ivt = fabric.util.invertTransform(this.viewportTransform),
+            pointer = fabric.util.transformPoint(this.getPointer(e, true), ivt);
+        this.freeDrawingBrush.onMouseMove(pointer);
+      }
+      this.setCursor(this.freeDrawingCursor);
+      this.fire('mouse:move', { e: e });
+
+      var target = this.findTarget(e);
+      if (typeof target !== 'undefined') {
+        target.fire('mousemove', { e: e, target: target });
+      }
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object fired on mouseup
+     */
+    _onMouseUpInDrawingMode: function(e) {
+      this._isCurrentlyDrawing = false;
+      if (this.clipTo) {
+        this.contextTop.restore();
+      }
+      this.freeDrawingBrush.onMouseUp();
+      this.fire('mouse:up', { e: e });
+
+      var target = this.findTarget(e);
+      if (typeof target !== 'undefined') {
+        target.fire('mouseup', { e: e, target: target });
+      }
+    },
+
+    /**
+     * Method that defines the actions when mouse is clic ked on canvas.
+     * The method inits the currentTransform parameters and renders all the
+     * canvas so the current image can be placed on the top canvas and the rest
+     * in on the container one.
+     * @private
+     * @param {Event} e Event object fired on mousedown
+     */
+    __onMouseDown: function (e) {
+
+      // accept only left clicks
+      var isLeftClick  = 'which' in e ? e.which === 1 : e.button === 1;
+      if (!isLeftClick && !fabric.isTouchSupported) {
+        return;
+      }
+
+      if (this.isDrawingMode) {
+        this._onMouseDownInDrawingMode(e);
+        return;
+      }
+
+      // ignore if some object is being transformed at this moment
+      if (this._currentTransform) {
+        return;
+      }
+
+      var target = this.findTarget(e),
+          pointer = this.getPointer(e, true);
+
+      // save pointer for check in __onMouseUp event
+      this._previousPointer = pointer;
+
+      var shouldRender = this._shouldRender(target, pointer),
+          shouldGroup = this._shouldGroup(e, target);
+
+      if (this._shouldClearSelection(e, target)) {
+        this._clearSelection(e, target, pointer);
+      }
+      else if (shouldGroup) {
+        this._handleGrouping(e, target);
+        target = this.getActiveGroup();
+      }
+
+      if (target && target.selectable && !shouldGroup) {
+        this._beforeTransform(e, target);
+        this._setupCurrentTransform(e, target);
+      }
+      // we must renderAll so that active image is placed on the top canvas
+      shouldRender && this.renderAll();
+
+      this.fire('mouse:down', { target: target, e: e });
+      target && target.fire('mousedown', { e: e });
+    },
+
+    /**
+     * @private
+     */
+    _beforeTransform: function(e, target) {
+      this.stateful && target.saveState();
+
+      // determine if it's a drag or rotate case
+      if (target._findTargetCorner(this.getPointer(e))) {
+        this.onBeforeScaleRotate(target);
+      }
+
+      if (target !== this.getActiveGroup() && target !== this.getActiveObject()) {
+        this.deactivateAll();
+        this.setActiveObject(target, e);
+      }
+    },
+
+    /**
+     * @private
+     */
+    _clearSelection: function(e, target, pointer) {
+      this.deactivateAllWithDispatch(e);
+
+      if (target && target.selectable) {
+        this.setActiveObject(target, e);
+      }
+      else if (this.selection) {
+        this._groupSelector = {
+          ex: pointer.x,
+          ey: pointer.y,
+          top: 0,
+          left: 0
+        };
+      }
+    },
+
+    /**
+     * @private
+     * @param {Object} target Object for that origin is set to center
+     */
+    _setOriginToCenter: function(target) {
+      this._previousOriginX = this._currentTransform.target.originX;
+      this._previousOriginY = this._currentTransform.target.originY;
+
+      var center = target.getCenterPoint();
+
+      target.originX = 'center';
+      target.originY = 'center';
+
+      target.left = center.x;
+      target.top = center.y;
+
+      this._currentTransform.left = target.left;
+      this._currentTransform.top = target.top;
+    },
+
+    /**
+     * @private
+     * @param {Object} target Object for that center is set to origin
+     */
+    _setCenterToOrigin: function(target) {
+      var originPoint = target.translateToOriginPoint(
+        target.getCenterPoint(),
+        this._previousOriginX,
+        this._previousOriginY);
+
+      target.originX = this._previousOriginX;
+      target.originY = this._previousOriginY;
+
+      target.left = originPoint.x;
+      target.top = originPoint.y;
+
+      this._previousOriginX = null;
+      this._previousOriginY = null;
+    },
+
+    /**
+      * Method that defines the actions when mouse is hovering the canvas.
+      * The currentTransform parameter will definde whether the user is rotating/scaling/translating
+      * an image or neither of them (only hovering). A group selection is also possible and would cancel
+      * all any other type of action.
+      * In case of an image transformation only the top canvas will be rendered.
+      * @private
+      * @param {Event} e Event object fired on mousemove
+      */
+    __onMouseMove: function (e) {
+
+      var target, pointer;
+
+      if (this.isDrawingMode) {
+        this._onMouseMoveInDrawingMode(e);
+        return;
+      }
+      if (typeof e.touches !== 'undefined' && e.touches.length > 1) {
+        return;
+      }
+
+      var groupSelector = this._groupSelector;
+
+      // We initially clicked in an empty area, so we draw a box for multiple selection
+      if (groupSelector) {
+        pointer = this.getPointer(e, true);
+
+        groupSelector.left = pointer.x - groupSelector.ex;
+        groupSelector.top = pointer.y - groupSelector.ey;
+
+        this.renderTop();
+      }
+      else if (!this._currentTransform) {
+
+        target = this.findTarget(e);
+
+        if (!target || target && !target.selectable) {
+          this.setCursor(this.defaultCursor);
+        }
+        else {
+          this._setCursorFromEvent(e, target);
+        }
+      }
+      else {
+        this._transformObject(e);
+      }
+
+      this.fire('mouse:move', { target: target, e: e });
+      target && target.fire('mousemove', { e: e });
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event fired on mousemove
+     */
+    _transformObject: function(e) {
+      var pointer = this.getPointer(e),
+          transform = this._currentTransform;
+
+      transform.reset = false,
+      transform.target.isMoving = true;
+
+      this._beforeScaleTransform(e, transform);
+      this._performTransformAction(e, transform, pointer);
+
+      this.renderAll();
+    },
+
+    /**
+     * @private
+     */
+    _performTransformAction: function(e, transform, pointer) {
+      var x = pointer.x,
+          y = pointer.y,
+          target = transform.target,
+          action = transform.action;
+
+      if (action === 'rotate') {
+        this._rotateObject(x, y);
+        this._fire('rotating', target, e);
+      }
+      else if (action === 'scale') {
+        this._onScale(e, transform, x, y);
+        this._fire('scaling', target, e);
+      }
+      else if (action === 'scaleX') {
+        this._scaleObject(x, y, 'x');
+        this._fire('scaling', target, e);
+      }
+      else if (action === 'scaleY') {
+        this._scaleObject(x, y, 'y');
+        this._fire('scaling', target, e);
+      }
+      else {
+        this._translateObject(x, y);
+        this._fire('moving', target, e);
+        this.setCursor(this.moveCursor);
+      }
+    },
+
+    /**
+     * @private
+     */
+    _fire: function(eventName, target, e) {
+      this.fire('object:' + eventName, { target: target, e: e });
+      target.fire(eventName, { e: e });
+    },
+
+    /**
+     * @private
+     */
+    _beforeScaleTransform: function(e, transform) {
+      if (transform.action === 'scale' || transform.action === 'scaleX' || transform.action === 'scaleY') {
+        var centerTransform = this._shouldCenterTransform(e, transform.target);
+
+        // Switch from a normal resize to center-based
+        if ((centerTransform && (transform.originX !== 'center' || transform.originY !== 'center')) ||
+           // Switch from center-based resize to normal one
+           (!centerTransform && transform.originX === 'center' && transform.originY === 'center')
+        ) {
+          this._resetCurrentTransform(e);
+          transform.reset = true;
+        }
+      }
+    },
+
+    /**
+     * @private
+     */
+    _onScale: function(e, transform, x, y) {
+      // rotate object only if shift key is not pressed
+      // and if it is not a group we are transforming
+      if ((e.shiftKey || this.uniScaleTransform) && !transform.target.get('lockUniScaling')) {
+        transform.currentAction = 'scale';
+        this._scaleObject(x, y);
+      }
+      else {
+        // Switch from a normal resize to proportional
+        if (!transform.reset && transform.currentAction === 'scale') {
+          this._resetCurrentTransform(e, transform.target);
+        }
+
+        transform.currentAction = 'scaleEqually';
+        this._scaleObject(x, y, 'equally');
+      }
+    },
+
+    /**
+     * Sets the cursor depending on where the canvas is being hovered.
+     * Note: very buggy in Opera
+     * @param {Event} e Event object
+     * @param {Object} target Object that the mouse is hovering, if so.
+     */
+    _setCursorFromEvent: function (e, target) {
+      if (!target || !target.selectable) {
+        this.setCursor(this.defaultCursor);
+        return false;
+      }
+      else {
+        var activeGroup = this.getActiveGroup(),
+            // only show proper corner when group selection is not active
+            corner = target._findTargetCorner
+                      && (!activeGroup || !activeGroup.contains(target))
+                      && target._findTargetCorner(this.getPointer(e, true));
+
+        if (!corner) {
+          this.setCursor(target.hoverCursor || this.hoverCursor);
+        }
+        else {
+          this._setCornerCursor(corner, target);
+        }
+      }
+      return true;
+    },
+
+    /**
+     * @private
+     */
+    _setCornerCursor: function(corner, target) {
+      if (corner in cursorOffset) {
+        this.setCursor(this._getRotatedCornerCursor(corner, target));
+      }
+      else if (corner === 'mtr' && target.hasRotatingPoint) {
+        this.setCursor(this.rotationCursor);
+      }
+      else {
+        this.setCursor(this.defaultCursor);
+        return false;
+      }
+    },
+
+    /**
+     * @private
+     */
+    _getRotatedCornerCursor: function(corner, target) {
+      var n = Math.round((target.getAngle() % 360) / 45);
+
+      if (n < 0) {
+        n += 8; // full circle ahead
+      }
+      n += cursorOffset[corner];
+      // normalize n to be from 0 to 7
+      n %= 8;
+
+      return this.cursorMap[n];
+    }
+  });
+})();
+(function() {
+
+  var min = Math.min,
+      max = Math.max;
+
+  fabric.util.object.extend(fabric.Canvas.prototype, /** @lends fabric.Canvas.prototype */ {
+
+    /**
+     * @private
+     * @param {Event} e Event object
+     * @param {fabric.Object} target
+     * @return {Boolean}
+     */
+    _shouldGroup: function(e, target) {
+      var activeObject = this.getActiveObject();
+      return e.shiftKey &&
+            (this.getActiveGroup() || (activeObject && activeObject !== target))
+            && this.selection;
+    },
+
+    /**
+     * @private
+     * @param {Event} e Event object
+     * @param {fabric.Object} target
+     */
+    _handleGrouping: function (e, target) {
+
+      if (target === this.getActiveGroup()) {
+
+        // if it's a group, find target again, this time skipping group
+        target = this.findTarget(e, true);
+
+        // if even object is not found, bail out
+        if (!target || target.isType('group')) {
+          return;
+        }
+      }
+      if (this.getActiveGroup()) {
+        this._updateActiveGroup(target, e);
+      }
+      else {
+        this._createActiveGroup(target, e);
+      }
+
+      if (this._activeGroup) {
+        this._activeGroup.saveCoords();
+      }
+    },
+
+    /**
+     * @private
+     */
+    _updateActiveGroup: function(target, e) {
+      var activeGroup = this.getActiveGroup();
+
+      if (activeGroup.contains(target)) {
+
+        activeGroup.removeWithUpdate(target);
+        this._resetObjectTransform(activeGroup);
+        target.set('active', false);
+
+        if (activeGroup.size() === 1) {
+          // remove group alltogether if after removal it only contains 1 object
+          this.discardActiveGroup(e);
+          // activate last remaining object
+          this.setActiveObject(activeGroup.item(0));
+          return;
+        }
+      }
+      else {
+        activeGroup.addWithUpdate(target);
+        this._resetObjectTransform(activeGroup);
+      }
+      this.fire('selection:created', { target: activeGroup, e: e });
+      activeGroup.set('active', true);
+    },
+
+    /**
+     * @private
+     */
+    _createActiveGroup: function(target, e) {
+
+      if (this._activeObject && target !== this._activeObject) {
+
+        var group = this._createGroup(target);
+        group.addWithUpdate();
+
+        this.setActiveGroup(group);
+        this._activeObject = null;
+
+        this.fire('selection:created', { target: group, e: e });
+      }
+
+      target.set('active', true);
+    },
+
+    /**
+     * @private
+     * @param {Object} target
+     */
+    _createGroup: function(target) {
+
+      var objects = this.getObjects(),
+          isActiveLower = objects.indexOf(this._activeObject) < objects.indexOf(target),
+          groupObjects = isActiveLower
+            ? [ this._activeObject, target ]
+            : [ target, this._activeObject ];
+
+      return new fabric.Group(groupObjects, {
+        canvas: this
+      });
+    },
+
+    /**
+     * @private
+     * @param {Event} e mouse event
+     */
+    _groupSelectedObjects: function (e) {
+
+      var group = this._collectObjects();
+
+      // do not create group for 1 element only
+      if (group.length === 1) {
+        this.setActiveObject(group[0], e);
+      }
+      else if (group.length > 1) {
+        group = new fabric.Group(group.reverse(), {
+          canvas: this
+        });
+        group.addWithUpdate();
+        this.setActiveGroup(group, e);
+        group.saveCoords();
+        this.fire('selection:created', { target: group });
+        this.renderAll();
+      }
+    },
+
+    /**
+     * @private
+     */
+    _collectObjects: function() {
+      var group = [ ],
+          currentObject,
+          x1 = this._groupSelector.ex,
+          y1 = this._groupSelector.ey,
+          x2 = x1 + this._groupSelector.left,
+          y2 = y1 + this._groupSelector.top,
+          selectionX1Y1 = new fabric.Point(min(x1, x2), min(y1, y2)),
+          selectionX2Y2 = new fabric.Point(max(x1, x2), max(y1, y2)),
+          isClick = x1 === x2 && y1 === y2;
+
+      for (var i = this._objects.length; i--; ) {
+        currentObject = this._objects[i];
+
+        if (!currentObject || !currentObject.selectable || !currentObject.visible) {
+          continue;
+        }
+
+        if (currentObject.intersectsWithRect(selectionX1Y1, selectionX2Y2) ||
+            currentObject.isContainedWithinRect(selectionX1Y1, selectionX2Y2) ||
+            currentObject.containsPoint(selectionX1Y1) ||
+            currentObject.containsPoint(selectionX2Y2)
+        ) {
+          currentObject.set('active', true);
+          group.push(currentObject);
+
+          // only add one object if it's a click
+          if (isClick) {
+            break;
+          }
+        }
+      }
+
+      return group;
+    },
+
+    /**
+     * @private
+     */
+    _maybeGroupObjects: function(e) {
+      if (this.selection && this._groupSelector) {
+        this._groupSelectedObjects(e);
+      }
+
+      var activeGroup = this.getActiveGroup();
+      if (activeGroup) {
+        activeGroup.setObjectsCoords().setCoords();
+        activeGroup.isMoving = false;
+        this.setCursor(this.defaultCursor);
+      }
+
+      // clear selection and current transformation
+      this._groupSelector = null;
+      this._currentTransform = null;
+    }
+  });
+
+})();
 fabric.util.object.extend(fabric.StaticCanvas.prototype, /** @lends fabric.StaticCanvas.prototype */ {
 
   /**
@@ -8851,6 +10944,360 @@ fabric.util.object.extend(fabric.Object.prototype, /** @lends fabric.Object.prot
     return this;
   }
 });
+(function() {
+
+  var degreesToRadians = fabric.util.degreesToRadians,
+      //jscs:disable requireCamelCaseOrUpperCaseIdentifiers
+      isVML = function() { return typeof G_vmlCanvasManager !== 'undefined'; };
+  //jscs:enable requireCamelCaseOrUpperCaseIdentifiers
+
+  fabric.util.object.extend(fabric.Object.prototype, /** @lends fabric.Object.prototype */ {
+
+    /**
+     * The object interactivity controls.
+     * @private
+     */
+    _controlsVisibility: null,
+
+    /**
+     * Determines which corner has been clicked
+     * @private
+     * @param {Object} pointer The pointer indicating the mouse position
+     * @return {String|Boolean} corner code (tl, tr, bl, br, etc.), or false if nothing is found
+     */
+    _findTargetCorner: function(pointer) {
+      if (!this.hasControls || !this.active) {
+        return false;
+      }
+
+      var ex = pointer.x,
+          ey = pointer.y,
+          xPoints,
+          lines;
+
+      for (var i in this.oCoords) {
+
+        if (!this.isControlVisible(i)) {
+          continue;
+        }
+
+        if (i === 'mtr' && !this.hasRotatingPoint) {
+          continue;
+        }
+
+        if (this.get('lockUniScaling') &&
+           (i === 'mt' || i === 'mr' || i === 'mb' || i === 'ml')) {
+          continue;
+        }
+
+        lines = this._getImageLines(this.oCoords[i].corner);
+
+        // debugging
+
+        // canvas.contextTop.fillRect(lines.bottomline.d.x, lines.bottomline.d.y, 2, 2);
+        // canvas.contextTop.fillRect(lines.bottomline.o.x, lines.bottomline.o.y, 2, 2);
+
+        // canvas.contextTop.fillRect(lines.leftline.d.x, lines.leftline.d.y, 2, 2);
+        // canvas.contextTop.fillRect(lines.leftline.o.x, lines.leftline.o.y, 2, 2);
+
+        // canvas.contextTop.fillRect(lines.topline.d.x, lines.topline.d.y, 2, 2);
+        // canvas.contextTop.fillRect(lines.topline.o.x, lines.topline.o.y, 2, 2);
+
+        // canvas.contextTop.fillRect(lines.rightline.d.x, lines.rightline.d.y, 2, 2);
+        // canvas.contextTop.fillRect(lines.rightline.o.x, lines.rightline.o.y, 2, 2);
+
+        xPoints = this._findCrossPoints({ x: ex, y: ey }, lines);
+        if (xPoints !== 0 && xPoints % 2 === 1) {
+          this.__corner = i;
+          return i;
+        }
+      }
+      return false;
+    },
+
+    /**
+     * Sets the coordinates of the draggable boxes in the corners of
+     * the image used to scale/rotate it.
+     * @private
+     */
+    _setCornerCoords: function() {
+      var coords = this.oCoords,
+          newTheta = degreesToRadians(45 - this.angle),
+          cornerHypotenuse = Math.sqrt(2 * Math.pow(this.cornerSize, 2)) / 2,
+          cosHalfOffset = cornerHypotenuse * Math.cos(newTheta),
+          sinHalfOffset = cornerHypotenuse * Math.sin(newTheta),
+          x, y;
+
+      for (var point in coords) {
+        x = coords[point].x;
+        y = coords[point].y;
+        coords[point].corner = {
+          tl: {
+            x: x - sinHalfOffset,
+            y: y - cosHalfOffset
+          },
+          tr: {
+            x: x + cosHalfOffset,
+            y: y - sinHalfOffset
+          },
+          bl: {
+            x: x - cosHalfOffset,
+            y: y + sinHalfOffset
+          },
+          br: {
+            x: x + sinHalfOffset,
+            y: y + cosHalfOffset
+          }
+        };
+      }
+    },
+
+    _calculateCurrentDimensions: function(shouldTransform)  {
+      var vpt = this.getViewportTransform(),
+          strokeWidth = this.strokeWidth,
+          w = this.width,
+          h = this.height,
+          capped = this.strokeLineCap === 'round' || this.strokeLineCap === 'square',
+          vLine = this.type === 'line' && this.width === 0,
+          hLine = this.type === 'line' && this.height === 0,
+          sLine = vLine || hLine,
+          strokeW = (capped && hLine) || !sLine,
+          strokeH = (capped && vLine) || !sLine;
+
+      if (vLine) {
+        w = strokeWidth;
+      }
+      else if (hLine) {
+        h = strokeWidth;
+      }
+      if (strokeW) {
+        w += (w < 0 ? -strokeWidth : strokeWidth);
+      }
+      if (strokeH) {
+        h += (h < 0 ? -strokeWidth : strokeWidth);
+      }
+
+      w = w * this.scaleX + 2 * this.padding;
+      h = h * this.scaleY + 2 * this.padding;
+
+      if (shouldTransform) {
+        return fabric.util.transformPoint(new fabric.Point(w, h), vpt, true);
+      }
+      return { x: w, y: h };
+    },
+
+    /**
+     * Draws borders of an object's bounding box.
+     * Requires public properties: width, height
+     * Requires public options: padding, borderColor
+     * @param {CanvasRenderingContext2D} ctx Context to draw on
+     * @return {fabric.Object} thisArg
+     * @chainable
+     */
+    drawBorders: function(ctx) {
+      if (!this.hasBorders) {
+        return this;
+      }
+
+      ctx.save();
+
+      ctx.globalAlpha = this.isMoving ? this.borderOpacityWhenMoving : 1;
+      ctx.strokeStyle = this.borderColor;
+      ctx.lineWidth = 1 / this.borderScaleFactor;
+
+      var wh = this._calculateCurrentDimensions(true),
+          width = wh.x,
+          height = wh.y;
+      if (this.group) {
+        width = width * this.group.scaleX;
+        height = height * this.group.scaleY;
+      }
+
+      ctx.strokeRect(
+        ~~(-(width / 2)) - 0.5, // offset needed to make lines look sharper
+        ~~(-(height / 2)) - 0.5,
+        ~~(width) + 1, // double offset needed to make lines look sharper
+        ~~(height) + 1
+      );
+
+      if (this.hasRotatingPoint && this.isControlVisible('mtr') && !this.get('lockRotation') && this.hasControls) {
+
+        var rotateHeight = -height / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(0, rotateHeight);
+        ctx.lineTo(0, rotateHeight - this.rotatingPointOffset);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      ctx.restore();
+      return this;
+    },
+
+    /**
+     * Draws corners of an object's bounding box.
+     * Requires public properties: width, height
+     * Requires public options: cornerSize, padding
+     * @param {CanvasRenderingContext2D} ctx Context to draw on
+     * @return {fabric.Object} thisArg
+     * @chainable
+     */
+    drawControls: function(ctx) {
+      if (!this.hasControls) {
+        return this;
+      }
+
+      var wh = this._calculateCurrentDimensions(true),
+          width = wh.x,
+          height = wh.y,
+          left = -(width / 2),
+          top = -(height / 2),
+          scaleOffset = this.cornerSize / 2,
+          methodName = this.transparentCorners ? 'strokeRect' : 'fillRect';
+
+      ctx.save();
+
+      ctx.lineWidth = 1;
+
+      ctx.globalAlpha = this.isMoving ? this.borderOpacityWhenMoving : 1;
+      ctx.strokeStyle = ctx.fillStyle = this.cornerColor;
+
+      // top-left
+      this._drawControl('tl', ctx, methodName,
+        left - scaleOffset,
+        top - scaleOffset);
+
+      // top-right
+      this._drawControl('tr', ctx, methodName,
+        left + width - scaleOffset,
+        top - scaleOffset);
+
+      // bottom-left
+      this._drawControl('bl', ctx, methodName,
+        left - scaleOffset,
+        top + height - scaleOffset);
+
+      // bottom-right
+      this._drawControl('br', ctx, methodName,
+        left + width - scaleOffset,
+        top + height - scaleOffset);
+
+      if (!this.get('lockUniScaling')) {
+
+        // middle-top
+        this._drawControl('mt', ctx, methodName,
+          left + width/2 - scaleOffset,
+          top - scaleOffset);
+
+        // middle-bottom
+        this._drawControl('mb', ctx, methodName,
+          left + width/2 - scaleOffset,
+          top + height - scaleOffset);
+
+        // middle-right
+        this._drawControl('mr', ctx, methodName,
+          left + width - scaleOffset,
+          top + height/2 - scaleOffset);
+
+        // middle-left
+        this._drawControl('ml', ctx, methodName,
+          left - scaleOffset,
+          top + height/2 - scaleOffset);
+      }
+
+      // middle-top-rotate
+      if (this.hasRotatingPoint) {
+        this._drawControl('mtr', ctx, methodName,
+          left + width/2 - scaleOffset,
+          top - this.rotatingPointOffset - scaleOffset);
+      }
+
+      ctx.restore();
+
+      return this;
+    },
+
+    /**
+     * @private
+     */
+    _drawControl: function(control, ctx, methodName, left, top) {
+      if (!this.isControlVisible(control)) {
+        return;
+      }
+      var size = this.cornerSize;
+      isVML() || this.transparentCorners || ctx.clearRect(left, top, size, size);
+      ctx[methodName](left, top, size, size);
+    },
+
+    /**
+     * Returns true if the specified control is visible, false otherwise.
+     * @param {String} controlName The name of the control. Possible values are 'tl', 'tr', 'br', 'bl', 'ml', 'mt', 'mr', 'mb', 'mtr'.
+     * @returns {Boolean} true if the specified control is visible, false otherwise
+     */
+    isControlVisible: function(controlName) {
+      return this._getControlsVisibility()[controlName];
+    },
+
+    /**
+     * Sets the visibility of the specified control.
+     * @param {String} controlName The name of the control. Possible values are 'tl', 'tr', 'br', 'bl', 'ml', 'mt', 'mr', 'mb', 'mtr'.
+     * @param {Boolean} visible true to set the specified control visible, false otherwise
+     * @return {fabric.Object} thisArg
+     * @chainable
+     */
+    setControlVisible: function(controlName, visible) {
+      this._getControlsVisibility()[controlName] = visible;
+      return this;
+    },
+
+    /**
+     * Sets the visibility state of object controls.
+     * @param {Object} [options] Options object
+     * @param {Boolean} [options.bl] true to enable the bottom-left control, false to disable it
+     * @param {Boolean} [options.br] true to enable the bottom-right control, false to disable it
+     * @param {Boolean} [options.mb] true to enable the middle-bottom control, false to disable it
+     * @param {Boolean} [options.ml] true to enable the middle-left control, false to disable it
+     * @param {Boolean} [options.mr] true to enable the middle-right control, false to disable it
+     * @param {Boolean} [options.mt] true to enable the middle-top control, false to disable it
+     * @param {Boolean} [options.tl] true to enable the top-left control, false to disable it
+     * @param {Boolean} [options.tr] true to enable the top-right control, false to disable it
+     * @param {Boolean} [options.mtr] true to enable the middle-top-rotate control, false to disable it
+     * @return {fabric.Object} thisArg
+     * @chainable
+     */
+    setControlsVisibility: function(options) {
+      options || (options = { });
+
+      for (var p in options) {
+        this.setControlVisible(p, options[p]);
+      }
+      return this;
+    },
+
+    /**
+     * Returns the instance of the control visibility set for this object.
+     * @private
+     * @returns {Object}
+     */
+    _getControlsVisibility: function() {
+      if (!this._controlsVisibility) {
+        this._controlsVisibility = {
+          tl: true,
+          tr: true,
+          br: true,
+          bl: true,
+          ml: true,
+          mt: true,
+          mr: true,
+          mb: true,
+          mtr: true
+        };
+      }
+      return this._controlsVisibility;
+    }
+  });
+})();
 (function(global) {
 
   'use strict';
@@ -12855,3 +15302,197 @@ fabric.util.object.extend(fabric.Object.prototype, /** @lends fabric.Object.prot
   fabric.Image.pngCompression = 1;
 
 })(typeof exports !== 'undefined' ? exports : this);
+(function() {
+
+  if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+    return;
+  }
+
+  var DOMParser = require('xmldom').DOMParser,
+      URL = require('url'),
+      HTTP = require('http'),
+      HTTPS = require('https'),
+
+      Canvas = require('canvas'),
+      Image = require('canvas').Image;
+
+  /** @private */
+  function request(url, encoding, callback) {
+    var oURL = URL.parse(url);
+
+    // detect if http or https is used
+    if ( !oURL.port ) {
+      oURL.port = ( oURL.protocol.indexOf('https:') === 0 ) ? 443 : 80;
+    }
+
+    // assign request handler based on protocol
+    var reqHandler = (oURL.protocol.indexOf('https:') === 0 ) ? HTTPS : HTTP,
+        req = reqHandler.request({
+          hostname: oURL.hostname,
+          port: oURL.port,
+          path: oURL.path,
+          method: 'GET'
+        }, function(response) {
+          var body = '';
+          if (encoding) {
+            response.setEncoding(encoding);
+          }
+          response.on('end', function () {
+            callback(body);
+          });
+          response.on('data', function (chunk) {
+            if (response.statusCode === 200) {
+              body += chunk;
+            }
+          });
+        });
+
+    req.on('error', function(err) {
+      if (err.errno === process.ECONNREFUSED) {
+        fabric.log('ECONNREFUSED: connection refused to ' + oURL.hostname + ':' + oURL.port);
+      }
+      else {
+        fabric.log(err.message);
+      }
+    });
+
+    req.end();
+  }
+
+  /** @private */
+  function requestFs(path, callback) {
+    var fs = require('fs');
+    fs.readFile(path, function (err, data) {
+      if (err) {
+        fabric.log(err);
+        throw err;
+      }
+      else {
+        callback(data);
+      }
+    });
+  }
+
+  fabric.util.loadImage = function(url, callback, context) {
+    function createImageAndCallBack(data) {
+      img.src = new Buffer(data, 'binary');
+      // preserving original url, which seems to be lost in node-canvas
+      img._src = url;
+      callback && callback.call(context, img);
+    }
+    var img = new Image();
+    if (url && (url instanceof Buffer || url.indexOf('data') === 0)) {
+      img.src = img._src = url;
+      callback && callback.call(context, img);
+    }
+    else if (url && url.indexOf('http') !== 0) {
+      requestFs(url, createImageAndCallBack);
+    }
+    else if (url) {
+      request(url, 'binary', createImageAndCallBack);
+    }
+    else {
+      callback && callback.call(context, url);
+    }
+  };
+
+  fabric.loadSVGFromURL = function(url, callback, reviver) {
+    url = url.replace(/^\n\s*/, '').replace(/\?.*$/, '').trim();
+    if (url.indexOf('http') !== 0) {
+      requestFs(url, function(body) {
+        fabric.loadSVGFromString(body.toString(), callback, reviver);
+      });
+    }
+    else {
+      request(url, '', function(body) {
+        fabric.loadSVGFromString(body, callback, reviver);
+      });
+    }
+  };
+
+  fabric.loadSVGFromString = function(string, callback, reviver) {
+    var doc = new DOMParser().parseFromString(string);
+    fabric.parseSVGDocument(doc.documentElement, function(results, options) {
+      callback && callback(results, options);
+    }, reviver);
+  };
+
+  fabric.util.getScript = function(url, callback) {
+    request(url, '', function(body) {
+      eval(body);
+      callback && callback();
+    });
+  };
+
+  fabric.Image.fromObject = function(object, callback) {
+    fabric.util.loadImage(object.src, function(img) {
+      var oImg = new fabric.Image(img);
+
+      oImg._initConfig(object);
+      oImg._initFilters(object, function(filters) {
+        oImg.filters = filters || [ ];
+        callback && callback(oImg);
+      });
+    });
+  };
+
+  /**
+   * Only available when running fabric on node.js
+   * @param {Number} width Canvas width
+   * @param {Number} height Canvas height
+   * @param {Object} [options] Options to pass to FabricCanvas.
+   * @param {Object} [nodeCanvasOptions] Options to pass to NodeCanvas.
+   * @return {Object} wrapped canvas instance
+   */
+  fabric.createCanvasForNode = function(width, height, options, nodeCanvasOptions) {
+    nodeCanvasOptions = nodeCanvasOptions || options;
+
+    var canvasEl = fabric.document.createElement('canvas'),
+        nodeCanvas = new Canvas(width || 600, height || 600, nodeCanvasOptions);
+
+    // jsdom doesn't create style on canvas element, so here be temp. workaround
+    canvasEl.style = { };
+
+    canvasEl.width = nodeCanvas.width;
+    canvasEl.height = nodeCanvas.height;
+
+    var FabricCanvas = fabric.Canvas || fabric.StaticCanvas,
+        fabricCanvas = new FabricCanvas(canvasEl, options);
+
+    fabricCanvas.contextContainer = nodeCanvas.getContext('2d');
+    fabricCanvas.nodeCanvas = nodeCanvas;
+    fabricCanvas.Font = Canvas.Font;
+
+    return fabricCanvas;
+  };
+
+  /** @ignore */
+  fabric.StaticCanvas.prototype.createPNGStream = function() {
+    return this.nodeCanvas.createPNGStream();
+  };
+
+  fabric.StaticCanvas.prototype.createJPEGStream = function(opts) {
+    return this.nodeCanvas.createJPEGStream(opts);
+  };
+
+  var origSetWidth = fabric.StaticCanvas.prototype.setWidth;
+  fabric.StaticCanvas.prototype.setWidth = function(width, options) {
+    origSetWidth.call(this, width, options);
+    this.nodeCanvas.width = width;
+    return this;
+  };
+  if (fabric.Canvas) {
+    fabric.Canvas.prototype.setWidth = fabric.StaticCanvas.prototype.setWidth;
+  }
+
+  var origSetHeight = fabric.StaticCanvas.prototype.setHeight;
+  fabric.StaticCanvas.prototype.setHeight = function(height, options) {
+    origSetHeight.call(this, height, options);
+    this.nodeCanvas.height = height;
+    return this;
+  };
+  if (fabric.Canvas) {
+    fabric.Canvas.prototype.setHeight = fabric.StaticCanvas.prototype.setHeight;
+  }
+
+})();
