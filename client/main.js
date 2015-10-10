@@ -1,4 +1,4 @@
-var fabricCanvas;
+// var fabricCanvas;
 
 function resizeCanvas() {
 	console.log("New Window:", window.innerWidth, window.innerHeight);
@@ -10,10 +10,15 @@ Template.drawCanvas.onRendered(function() {
 	fabricCanvas = new fabric.Canvas('draw-canvas', {
 		isDrawingMode: true
 	});
-})
 
-Template.drawCanvas.events({
-	'click #draw-canvas': function() {
+	fabricCanvas.observe("mouse:move", function(e) {
+		var buttons = e.e.buttons;
+		if (e.e.buttons & 1) {
+			console.log("move", e.e.x, e.e.y);
+		}
+	});
 
-	}
-})
+	fabricCanvas.observe("mouse:down", function(e) {
+		console.log("down", e.e.x, e.e.y);
+	});
+});

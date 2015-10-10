@@ -1,5 +1,8 @@
-Router.route('/', {
-  name: 'home'
+Router.route('/', function() {
+	Meteor.subscribe("canvasStates");
+	this.render("home");
+}, {
+  name: 'home',
 });
 
 Router.route('/dashboard', {
