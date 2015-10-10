@@ -9,6 +9,10 @@ Template.drawCanvas.onRendered(function() {
 	var fabricCanvas = null;
 
 	this.autorun(()=> {
+		// This autorun will rerun whenever there is a new game made available
+		// or when the current user changes from being a drawer to not being a
+		// drawer or vice-versa.
+
 		var currentGame = Games.current({
 			fields: {
 				_id: 1,
@@ -17,19 +21,25 @@ Template.drawCanvas.onRendered(function() {
 		});
 
 		if (!currentGame) {
+			//There is nure current game, so wait for the next computation.
 			return;
 		}
 
 		var gameId = currentGame._id;
 
-		if (!fabricCanvas) {
+		if (!fabricCanvas)
+			//This is the first time we are having a game, so initialize the
+			//the canvas
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
-		}
+
 
 		var isDrawer = true; //currentGame.isDrawer();
 
+		//Isolate the canvas state autorun form the parent autorun
 		Tracker.autorun(() => {
+			//Get the game again, but this time with the canvas state included.
 			var currentGame = Games.findOne(gameId, {
+				// Do not react to changes when the current user is the drawer.
 				reactive: !isDrawer,
 				fields: {state: 1}
 			});
