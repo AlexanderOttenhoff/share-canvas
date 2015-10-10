@@ -32,7 +32,7 @@ Template.drawCanvas.onRendered(function() {
 		});
 	}
 
-	fabricCanvas.observe("mouse:move", function(e) {
+	fabricCanvas.on("mouse:move", function(e) {
 		if (e.e.buttons & 1) {
 			var state = fabricCanvas.toJSON();
 
