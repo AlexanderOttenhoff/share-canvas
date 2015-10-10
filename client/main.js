@@ -1,5 +1,6 @@
 // TODO: Remove for release
 // var fabricCanvas;
+var currentId;
 
 function resizeCanvas() {
 	console.log("New Window:", window.innerWidth, window.innerHeight);
@@ -17,11 +18,13 @@ Template.drawCanvas.onRendered(function() {
 			startTime: -1
 		}
 	});
+	currentId = currentCanvasState._id;
 
 	if (_.isUndefined(currentCanvasState)) {
 		CanvasStates.insert({startTime: new Date()}, function(err, res) {
 			if (err) console.error(err);
 			else console.log(res);
+			currentId = res;
 		});
 	}
 
@@ -31,7 +34,7 @@ Template.drawCanvas.onRendered(function() {
 
 			// Here's where we update the collection
 			CanvasStates.update({
-				_id: currentCanvasState._id
+				_id: currentId
 			}, {
 				$set: {
 					objects: objects
