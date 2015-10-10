@@ -72,7 +72,7 @@ Template.drawCanvas.onRendered(function() {
 					}
 				}, function(err, res) {
 					if (err) console.error(err);
-					else console.log(res);
+					// else console.log(res);
 				});
 			}
 		});
