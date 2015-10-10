@@ -46,8 +46,6 @@ Template.drawCanvas.onRendered(function() {
 		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
 		fabricCanvas.freeDrawingBrush.width=5;
 		
-		fabricCanvas.on("mouse:down", function(e) {
-		});
 
 		fabricCanvas.on("mouse:move", function(e) {
 			if (e.e.buttons & 1) {
