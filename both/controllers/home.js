@@ -2,4 +2,5 @@ HomeController = AppController.extend({
   data: {
 
   }
+
 });

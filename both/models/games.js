@@ -1,7 +1,8 @@
 Games = new Mongo.Collection('games', {
 	transform(doc) {
 		return new Game(doc);
-	}
+	},
+	_preventAutopublish: true
 });
 
 class Game extends Record {
@@ -17,9 +18,6 @@ class Game extends Record {
 
 }
 
-
-
-
 Meteor.methods({
 
 	makeGuess(gameId, answer) {
@@ -31,7 +29,7 @@ Meteor.methods({
 			$set: {guesses: []}
 		});
 
-		var guessObject =  {
+		var guess =  {
 			guessedAt: new Date(),
 			userId: this.userId,
 			answer: answer
@@ -41,19 +39,18 @@ Meteor.methods({
 			var game = Games.findOne(gameId, {
 				fields: {answer: 1}
 			});
-			guessObject.isCorrect = (game.answer === answer);
+			guess.isCorrect = (game.solution === answer);
 		}
 
 		// Add the guess to the array
 		return Games.update(gameId, {
-			$push: {guesses: guessObject}
+			$push: {guesses: guess}
 		});
 	}
 });
 
 // Unofficial Schema:
 var sampleSchema = {
-	answer: "Pirates of the Caribbean",
 	guess: [{
 		text: "The Matrix",
 		userId: 'userId',
@@ -74,6 +71,20 @@ Games.current = (options = {}) => {
 	return Games.findOne({endTime: {$exists: false}}, _.defaults({
 		sort: {startTime: -1}
 	}, options));
+};
+
+Games.startNewRound = (drawerId) => {
+	Games.update({endTime: {$exists: false}}, {
+		$set: {endTime: new Date()}
+	}, {multi: true});
+
+	var pool = ThingsToGuess.findOne();
+
+	Games.insert({
+		startTime: new Date(),
+		drawerId: drawerId,
+		solution: Random.choice(pool.movies)
+	});
 };
 
 Meteor.startup(() => {
