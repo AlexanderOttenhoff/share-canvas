@@ -1,0 +1,52 @@
+<template name="game">
+    <div class="container game-container">
+        <div class="col-md-8">
+            {{> drawCanvas}}
+        </div>
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Guess the movie</h3>
+
+                    <div class="collapse navbar-collapse" id="main-nav">
+                        {{#if currentUser}}
+                            <ul class="nav navbar-nav navbar-right">
+                                <li class="dropdown">
+                                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                                        <i class="fa fa-user"></i> {{ currentUser.profile.name }} <i class="fa fa-caret-down"></i>
+                                    </a>
+                                    <ul class="dropdown-menu" role="menu">
+                                        <li><a href="#" data-action="logout"><i class="fa fa-lock"></i> Sign Out</a></li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        {{else}}
+                            <div class="navbar-right">
+                                <a href="{{ pathFor 'atSignIn' }}" class="btn btn-default navbar-btn">Sign in</a>
+                                <a href="{{ pathFor 'atSignUp' }}" class="btn btn-primary navbar-btn">Register</a>
+                            </div>
+                        {{/if}}
+                    </div>
+
+                </div>
+                <div class="panel-body">
+                    Players
+                    <ul>
+                        <li>Alex</li>
+                        <li>Clément</li>
+                        <li>Garik</li>
+                        <li>Marcus</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Take your guess</h3>
+                </div>
+                {{> chat_feed}}
+            </div>
+        </div>
+    </div>
+
+
+</template>
