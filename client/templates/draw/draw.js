@@ -26,8 +26,9 @@ Template.drawCanvas.onRendered(function() {
 
 		var gameId = currentGame._id;
 
-		if (!fabricCanvas)
+		if (!fabricCanvas) {
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
+		}
 
 		var isDrawer = true; //currentGame.isDrawer();
 
@@ -61,7 +62,7 @@ Template.drawCanvas.onRendered(function() {
 					}
 				}, function(err, res) {
 					if (err) console.error(err);
-					else console.log(res);
+					// else console.log(res);
 				});
 			}
 		});
