@@ -7,7 +7,7 @@
 meteor-platform
 less
 accounts-password
-twbs:bootstrap
+useraccounts:bootstrap
 alanning:roles
 zimme:iron-router-active
 cmather:handlebars-server@0.2.0
