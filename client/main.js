@@ -9,18 +9,20 @@ window.addEventListener('resize', resizeCanvas, false);
 
 
 Template.drawCanvas.onRendered(function() {
-	fabricCanvas = new fabric.Canvas('draw-canvas', {
-		isDrawingMode: true
-	});
+	fabricCanvas = new fabric.Canvas('draw-canvas');
 
-	var currentCanvasState = CanvasStates.findOne({}, {
+	var latestCanvasState = CanvasStates.findOne({}, {
 		sort: {
 			startTime: -1
 		}
 	});
-	currentId = currentCanvasState._id;
 
-	if (_.isUndefined(currentCanvasState)) {
+	fabricCanvas.loadFromJSON(latestCanvasState.state);
+	fabricCanvas.isDrawingMode = true;
+
+	currentId = latestCanvasState._id;
+
+	if (_.isUndefined(latestCanvasState)) {
 		CanvasStates.insert({startTime: new Date()}, function(err, res) {
 			if (err) console.error(err);
 			else console.log(res);
@@ -30,14 +32,14 @@ Template.drawCanvas.onRendered(function() {
 
 	fabricCanvas.observe("mouse:move", function(e) {
 		if (e.e.buttons & 1) {
-			var objects = fabricCanvas.toJSON().objects;
+			var state = fabricCanvas.toJSON();
 
 			// Here's where we update the collection
 			CanvasStates.update({
 				_id: currentId
 			}, {
 				$set: {
-					objects: objects
+					state: state
 				}
 			}, function(err, res) {
 				if (err) console.error(err);

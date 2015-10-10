@@ -17,8 +17,9 @@ if (Meteor.isServer) {
 // Unofficial Schema:
 var sampleSchema = {
 	startTime: "Timestamp",
-	objects: [
-		// Array of objects taken directly from fabric canvas
+	endTime: "Timestamp", //Only filled out when a game has finished
+	state: [
+		// All of the objects stored on the canvas
 	],
 	roomId: "ID" // Not used at the moment, but possibly useful in the future
 }
