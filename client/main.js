@@ -1,3 +1,4 @@
+// TODO: Remove for release
 // var fabricCanvas;
 
 function resizeCanvas() {
@@ -11,14 +12,34 @@ Template.drawCanvas.onRendered(function() {
 		isDrawingMode: true
 	});
 
-	fabricCanvas.observe("mouse:move", function(e) {
-		var buttons = e.e.buttons;
-		if (e.e.buttons & 1) {
-			console.log("move", e.e.x, e.e.y);
+	var currentCanvasState = CanvasStates.findOne({}, {
+		sort: {
+			startTime: -1
 		}
 	});
 
-	fabricCanvas.observe("mouse:down", function(e) {
-		console.log("down", e.e.x, e.e.y);
+	if (_.isUndefined(currentCanvasState)) {
+		CanvasStates.insert({startTime: new Date()}, function(err, res) {
+			if (err) console.error(err);
+			else console.log(res);
+		});
+	}
+
+	fabricCanvas.observe("mouse:move", function(e) {
+		if (e.e.buttons & 1) {
+			var objects = fabricCanvas.toJSON().objects;
+
+			// Here's where we update the collection
+			CanvasStates.update({
+				_id: currentCanvasState._id
+			}, {
+				$set: {
+					objects: objects
+				}
+			}, function(err, res) {
+				if (err) console.error(err);
+				else console.log(res);
+			});
+		}
 	});
 });

@@ -1,5 +1,6 @@
 Router.route('/', function() {
-	Meteor.subscribe("canvasStates");
+	// TODO: Enable after removing autoPublish
+	// Meteor.subscribe("canvasStates", /*Room ID*/);
 	this.render("home");
 }, {
   name: 'home',
