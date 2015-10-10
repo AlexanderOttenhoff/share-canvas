@@ -1,6 +1,7 @@
 <template name="chat_feed">
     <div class="chat-feed">
         <div class="panel-body msg_container_base">
+            <p># Users Online: {{countUsersOnline}}</p>
             {{#each messages}}
                 {{#if isOwnMessage}}
                     <div class="row msg_container base_sent">
