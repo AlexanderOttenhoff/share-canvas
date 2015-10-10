@@ -21,5 +21,7 @@ var sampleSchema = {
 	state: [
 		// All of the objects stored on the canvas
 	],
-	roomId: "ID" // Not used at the moment, but possibly useful in the future
+	roomId: "ID", // Not used at the moment, but possibly useful in the future
+	drawer: "userID", // ID of player with draw priviledges
+	solution: "Bridge over the River Kwai" // Solution string of the game
 }
