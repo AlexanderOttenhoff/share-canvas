@@ -10,6 +10,10 @@ Game.prototype = {
     isDrawer: () => {
         var user = Meteor.user();
         return user && user.profile && user.profile.drawer;
+    },
+
+    canvasState: (options) => {
+        return CanvasStates.findOne({endedAt: {$exists: false}}, options);
     }
 };
 
