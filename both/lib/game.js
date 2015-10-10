@@ -13,7 +13,7 @@ Game.prototype = {
     },
 
     canvasState: (options) => {
-        CanvasStates.findOne({endedAt: {$exists: false}}, options);
+        return CanvasStates.findOne({endedAt: {$exists: false}}, options);
     }
 };
 
