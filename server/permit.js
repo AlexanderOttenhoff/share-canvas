@@ -1,12 +1,12 @@
 Games.allow({
     insert: function() {
-        return true;
+        return false;
     },
     update: function() {
         return true;
     },
     remove: function() {
-        return true;
+        return false;
     }
 });
 

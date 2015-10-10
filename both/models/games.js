@@ -87,8 +87,10 @@ Games.startNewRound = (drawerId) => {
 	});
 };
 
-Meteor.startup(() => {
-	if (Games.find().count() == 0) {
-		Games.insert({startTime: new Date()});
-	}
-});
+if (Meteor.isServer) {
+	Meteor.startup(() => {
+		if (Games.find().count() == 0) {
+			Games.startNewRound(Meteor.users.findOne()._id);
+		}
+	});
+}
