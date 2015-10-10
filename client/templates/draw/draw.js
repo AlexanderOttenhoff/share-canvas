@@ -38,6 +38,9 @@ Template.drawCanvas.onRendered(function() {
 			});
 
 			fabricCanvas.loadFromJSON(currentGame.state);
+			
+			// Draw Null object to refresh canvas after loading JSON
+			fabricCanvas.add(new fabric.Object());
 		});
 
 		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
