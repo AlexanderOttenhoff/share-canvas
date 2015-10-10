@@ -14,7 +14,11 @@ class Game extends Record {
 	makeGuess(guess, callback) {
 		return Meteor.call('makeGuess', this._id, guess, callback);
 	}
+
 }
+
+
+
 
 Meteor.methods({
 
@@ -67,7 +71,13 @@ var sampleSchema = {
 };
 
 Games.current = (options = {}) => {
-	Games.findOne({endTime: {$exists: false}}, _.extend({
+	return Games.findOne({endTime: {$exists: false}}, _.defaults({
 		sort: {startTime: -1}
 	}, options));
 };
+
+Meteor.startup(() => {
+	if (Games.find().count() == 0) {
+		Games.insert({startTime: new Date()});
+	}
+});
