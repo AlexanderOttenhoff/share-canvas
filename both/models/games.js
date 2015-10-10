@@ -1,18 +1,13 @@
-Games = new Mongo.Collection('games');
+Games = new Mongo.Collection('games', {
+	transform(doc) {
+		return new Game(doc);
+	}
+});
 
-if (Meteor.isServer) {
-	Games.allow({
-		insert: function() {
-			return true;
-		},
-		update: function() {
-			return true;
-		},
-		remove: function() {
-			return true;
-		}
-	});
-}
+class Game extends Record {
+	// Define Game specfic methods here.
+};
+
 
 // Unofficial Schema:
 var sampleSchema = {
