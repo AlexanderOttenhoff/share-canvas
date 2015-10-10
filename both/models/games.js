@@ -6,7 +6,34 @@ Games = new Mongo.Collection('games', {
 
 class Game extends Record {
 	// Define Game specfic methods here.
+
+	makeGuess(guess, callback) {
+		Meteor.call('makeGuess', this._id, guess, callback);
+	}
 };
+
+Meteor.methods({
+	makeGuess(gameId, guess) {
+		// Assert that the gueses array exists:
+		Games.update({
+			_id: gameId,
+			guesses: {$exists: false}
+		}, {
+			$set: {guesses: []}
+		});
+
+		// Add the guess to the array
+		Games.update(this._id, {
+			$addToSet: {
+				guesses: {
+					guessedAt: new Date(),
+					userId: this.userId,
+					text: guess
+				}
+			}
+		});
+	}
+});
 
 
 // Unofficial Schema:
