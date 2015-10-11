@@ -113,7 +113,8 @@ Games.current = (options) => {
 
 Games.getDrawer = (options) => {
 	var lastGame = Games.findOne({endTime: {$exists: true}}, {endTime: -1});
-	var winnerId = lastGame && lastGame.winningGuess().userId;
+	var winningGuess = lastGame && lastGame.winningGuess();
+	var winnerId = winningGuess && winningGuess.userId;
 	var query = {
 		'profile.activeAt': {$gte: new Date(Date.now() - 10000)}
 	};
