@@ -54,24 +54,22 @@ Template.drawCanvas.onRendered(function() {
 		fabricCanvas.isDrawingMode = isDrawer;
 		fabricCanvas.freeDrawingBrush.width=5;
 
-		if (isDrawer)
-			fabricCanvas.on("mouse:move", function(e) {
-				if (e.e.buttons & 1) {
+		if (isDrawer) {
+			fabricCanvas.on("object:added", function (e) {
+				var state = fabricCanvas.toJSON();
 
-					var state = fabricCanvas.toJSON();
-
-					// Here's where we update the collection
-					Games.update({
-						_id: gameId
-					}, {
-						$set: {
-							state: state
-						}
-					}, function(err, res) {
-						if (err) console.error(err);
-						// else console.log(res);
-					});
-				}
+				// Here's where we update the collection
+				Games.update({
+					_id: gameId
+				}, {
+					$set: {
+						state: state
+					}
+				}, function (err, res) {
+					if (err) console.error(err);
+					// else console.log(res);
+				});
 			});
+		}
 	});
 });
