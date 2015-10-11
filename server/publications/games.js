@@ -1,7 +1,9 @@
-Meteor.publish('games', () => {
+Meteor.publish('games', function() {
+
+    var isDrawer = this.userId === Games.current().drawerId,
+      fields = isDrawer ? {} : {solution: 0};
+
     return Games.find({}, {
-        fields: {
-            solution: 0
-        }
+        fields: fields
     });
 });

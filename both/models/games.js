@@ -46,7 +46,7 @@ Meteor.methods({
 
 		if (Meteor.isServer) {
 			var game = Games.findOne(gameId, {
-				fields: {answer: 1}
+				fields: { solution: 1}
 			});
 			guess.isCorrect = (game.solution === answer);
 		}
@@ -133,7 +133,7 @@ Meteor.isServer && Meteor.setInterval(() => {
 if (Meteor.isServer) {
 	Meteor.startup(() => {
 		if (Games.find().count() == 0) {
-			Games.startNewRound(Meteor.users.findOne()._id);
+			Games.startNewRound(Meteor.users.findOne()._id); 			// note: userId argument is not used
 		}
 	});
 }
