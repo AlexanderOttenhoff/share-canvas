@@ -16,7 +16,7 @@ Template.drawCanvas.onRendered(function() {
 		var currentGame = Games.current({
 			fields: {
 				_id: 1,
-				drawer: 1
+				drawerId: 1
 			}
 		});
 
@@ -27,13 +27,14 @@ Template.drawCanvas.onRendered(function() {
 
 		var gameId = currentGame._id;
 
-		if (!fabricCanvas)
+		if (!fabricCanvas) {
 			//This is the first time we are having a game, so initialize the
 			//the canvas
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
-
+		}
 
 		var isDrawer = currentGame.isDrawer();
+
 
 		//Isolate the canvas state autorun form the parent autorun
 		Tracker.autorun(() => {
@@ -47,7 +48,7 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas.loadFromJSON(currentGame.state);
 
 			// Draw Null object to refresh canvas after loading JSON
-			// fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
+			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});
 
 		fabricCanvas.isDrawingMode = isDrawer;
