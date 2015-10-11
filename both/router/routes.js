@@ -1,16 +1,12 @@
 Router.route('/', function() {
 	// TODO: Enable after removing autoPublish
 	// Meteor.subscribe("canvasStates", /*Room ID*/);
-	this.render("home");
+	this.render("game");
 }, {
   name: 'home',
 });
 
-Router.route('/dashboard', {
-  name: 'dashboard',
-  controller: 'DashboardController'
-});
-
 Router.plugin('ensureSignedIn', {
+  // apply ensureSignedIn on game page?
   only: ['dashboard']
 });

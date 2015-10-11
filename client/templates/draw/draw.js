@@ -16,7 +16,7 @@ Template.drawCanvas.onRendered(function() {
 		var currentGame = Games.current({
 			fields: {
 				_id: 1,
-				drawer: 1
+				drawerId: 1
 			}
 		});
 
@@ -33,7 +33,8 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
 		}
 
-		var isDrawer = true; //currentGame.isDrawer();
+		var isDrawer = currentGame.isDrawer();
+
 
 		//Isolate the canvas state autorun form the parent autorun
 		Tracker.autorun(() => {
@@ -47,16 +48,14 @@ Template.drawCanvas.onRendered(function() {
 			fabricCanvas.loadFromJSON(currentGame.state);
 
 			// Draw Null object to refresh canvas after loading JSON
-			// fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
+			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});
 
-		fabricCanvas.isDrawingMode = isDrawer; //currentGame.isDrawer();
+		fabricCanvas.isDrawingMode = isDrawer;
 		fabricCanvas.freeDrawingBrush.width=5;
-		
 
-		fabricCanvas.on("mouse:move", function(e) {
-			if (e.e.buttons & 1) {
-
+		if (isDrawer) {
+			fabricCanvas.on("object:added", function (e) {
 				var state = fabricCanvas.toJSON();
 
 				// Here's where we update the collection
@@ -66,11 +65,11 @@ Template.drawCanvas.onRendered(function() {
 					$set: {
 						state: state
 					}
-				}, function(err, res) {
+				}, function (err, res) {
 					if (err) console.error(err);
 					// else console.log(res);
 				});
-			}
-		});
+			});
+		}
 	});
 });

@@ -1,9 +1,3 @@
-Meteor.setInterval(function() {
-	if (!_.isNull(Meteor.userId())) {
-		Meteor.users.update(Meteor.userId(), {
-			$set: {
-				activeAt: new Date()
-			}
-		});
-	}
+Meteor.setInterval(() => {
+	Meteor.call('ping');
 }, 5000);
