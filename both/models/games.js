@@ -27,6 +27,10 @@ class Game extends Record {
 	}
 }
 
+function compareGuess(attempt, answer) {
+	return attempt.toLowerCase() === answer.toLowerCase();
+}
+
 Meteor.methods({
 
 	makeGuess(gameId, answer) {
@@ -48,7 +52,7 @@ Meteor.methods({
 			var game = Games.findOne(gameId, {
 				fields: { solution: 1}
 			});
-			guess.isCorrect = (game.solution === answer);
+			guess.isCorrect = compareGuess(answer, game.solution);
 		}
 
 		// Add the guess to the array
