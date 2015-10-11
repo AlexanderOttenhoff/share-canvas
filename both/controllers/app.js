@@ -2,7 +2,10 @@ AppController = RouteController.extend({
   //layoutTemplate: 'appLayout'
 
   waitOn() {
-    return Meteor.subscribe('games');
+    return [
+      Meteor.subscribe('currentGame'),
+      Meteor.subscribe('currentGameSolution')
+    ];
   }
 });
 

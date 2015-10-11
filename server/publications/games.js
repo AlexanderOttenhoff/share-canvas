@@ -1,9 +1,9 @@
-Meteor.publish('games', function() {
+Meteor.publish('currentGame', () => {
+    return Games.currentGameCursor({},{fields: {solution: 0}});
+});
 
-    var isDrawer = Games.current() && this.userId === Games.current().drawerId,
-      fields = isDrawer ? {} : {solution: 0};
-
-    return Games.find({}, {
-        fields: fields
-    });
+Meteor.publish('currentGameSolution', function () {
+    return Games.currentGameCursor({
+        drawerId: this.userId
+    }, {fields: {solution: 1}});
 });

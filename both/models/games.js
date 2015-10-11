@@ -80,10 +80,23 @@ var sampleSchema = {
 	solution: "Bridge over the River Kwai" // Solution string of the game
 };
 
-Games.current = (options = {}) => {
-	return Games.findOne({endTime: {$exists: false}}, _.defaults({
-		sort: {startTime: -1}
+Games.currentGameCursor = (query, options) => {
+	var actualQuery = {
+		endTime: {$exists: false}
+	};
+
+	if (query && _.size(query)) {
+		actualQuery.$and = [query];
+	}
+
+	return Games.find(actualQuery, _.defaults({
+		sort: {startTime: -1},
+		limit: 1
 	}, options));
+};
+
+Games.current = (options) => {
+	return Games.currentGameCursor({}, options).fetch()[0];
 };
 
 Games.getDrawer = (options) => {
@@ -97,6 +110,8 @@ Games.getDrawer = (options) => {
 	}, query), options) || Meteor.users.findOne(query, options);
 };
 
+Games.roundTimeout = 120000;
+
 Games.startNewRound = () => {
 	var drawer = Games.getDrawer();
 
@@ -107,11 +122,20 @@ Games.startNewRound = () => {
 
 		var pool = ThingsToGuess.findOne();
 
-		return Games.insert({
+		var gameId = Games.insert({
 			startTime: new Date(),
 			drawerId: drawer._id,
 			solution: Random.choice(pool.movies)
 		});
+
+
+		Meteor.setTimeout(() => {
+			if (Games.current()._id === gameId) {
+				Games.startNewRound()
+			}
+		}, Games.roundTimeout);
+
+		return gameId;
 	}
 };
 
