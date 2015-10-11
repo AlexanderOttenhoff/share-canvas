@@ -17,6 +17,10 @@ function submitGuess(){
     if (result){
       // clear the field
       $inputField.val("");
+
+      if (result === "win"){
+        alert("right answer!");
+      }
     }
   });
 }

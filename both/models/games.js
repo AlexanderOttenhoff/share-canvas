@@ -52,9 +52,21 @@ Meteor.methods({
 		}
 
 		// Add the guess to the array
-		return Games.update(gameId, {
+		Games.update(gameId, {
 			$push: {guesses: guess}
 		});
+
+
+		// TODO display message to all users
+
+		// start new round
+		Meteor.setTimeout(function(){
+			Games.startNewRound();
+		}, 5000);
+
+		if (guess.isCorrect){
+			return "win";
+		}
 	}
 });
 
@@ -97,9 +109,17 @@ Games.startNewRound = () => {
 	var drawer = Games.getDrawer();
 
 	if (drawer) {
-		Games.update({endTime: {$exists: false}}, {
-			$set: {endTime: new Date()}
-		}, {multi: true});
+		Games.update(
+			{
+				endTime: {$exists: false} },
+			{
+				$set:
+					{ endTime: new Date() }
+			},
+			{
+				multi: true
+			}
+		);
 
 		var pool = ThingsToGuess.findOne();
 
@@ -122,11 +142,11 @@ Meteor.isServer && Meteor.setInterval(() => {
 		var drawer = currentGame.drawer();
 
 		if (drawer && drawer.activeAt < Date.now() - 10000) {
-			Games.startNewRound()
+			Games.startNewRound();
 		}
 	}
 	else {
-		Games.startNewRound()
+		Games.startNewRound();
 	}
 }, 10000);
 
