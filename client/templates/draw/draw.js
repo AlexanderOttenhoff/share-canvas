@@ -32,6 +32,9 @@ Template.drawCanvas.onRendered(function() {
 			//the canvas
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
 		}
+		else {
+			fabricCanvas.clear();
+		}
 
 		var isDrawer = currentGame.isDrawer();
 
