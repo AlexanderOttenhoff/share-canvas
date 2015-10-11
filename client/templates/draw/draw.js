@@ -27,11 +27,11 @@ Template.drawCanvas.onRendered(function() {
 
 		var gameId = currentGame._id;
 
-		if (!fabricCanvas)
+		if (!fabricCanvas) {
 			//This is the first time we are having a game, so initialize the
 			//the canvas
 			fabricCanvas = new fabric.Canvas(template.find('#draw-canvas'));
-
+		}
 
 		var isDrawer = true; //currentGame.isDrawer();
 
