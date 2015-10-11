@@ -49,7 +49,12 @@ Template.drawCanvas.onRendered(function() {
 			});
 
 			fabricCanvas.loadFromJSON(currentGame.state);
-
+			
+			// Disable ability to select and move paths
+			_.each(fabricCanvas.getObjects(), function(path){
+				path.selectable = false;
+			});
+			
 			// Draw Null object to refresh canvas after loading JSON
 			fabricCanvas.add(new fabric.Path('M 0 0 L 0 0'));
 		});

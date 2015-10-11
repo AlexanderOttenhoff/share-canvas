@@ -1,1 +1,1 @@
-Meteor.users._ensureIndex("profile.drawer", {unique: true});
+//Meteor.users._ensureIndex("profile.drawer", {unique: true});
