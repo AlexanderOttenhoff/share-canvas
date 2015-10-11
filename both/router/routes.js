@@ -6,7 +6,4 @@ Router.route('/', function() {
   name: 'home',
 });
 
-Router.plugin('ensureSignedIn', {
-  // apply ensureSignedIn on game page?
-  only: ['dashboard']
-});
+Router.plugin('ensureSignedIn');
