@@ -70,6 +70,8 @@ Meteor.methods({
 
 		if (guess.isCorrect){
 			return "win";
+		} else {
+			return "wrong";
 		}
 	}
 });

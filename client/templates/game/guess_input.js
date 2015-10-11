@@ -21,6 +21,13 @@ function submitGuess(){
       if (result === "win"){
         alert("right answer!");
       }
+      if (result === "wrong"){
+        $inputField.css('border', '2px solid red');
+
+        Meteor.setTimeout(function(){
+          $inputField.css('border', '1px solid #cccccc')
+        }, 300);
+      }
     }
   });
 }
