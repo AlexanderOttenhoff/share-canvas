@@ -137,7 +137,7 @@ Meteor.isServer && Meteor.setInterval(() => {
 if (Meteor.isServer) {
 	Meteor.startup(() => {
 		if (Games.find().count() == 0) {
-			Games.startNewRound(Meteor.users.findOne()._id); 			// note: userId argument is not used
+			Games.startNewRound();
 		}
 	});
 }
