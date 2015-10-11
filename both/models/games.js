@@ -149,11 +149,13 @@ Games.startNewRound = () => {
 			solution: Random.choice(pool.movies)
 		});
 
-
 		Meteor.setTimeout(() => {
-			if (Games.current()._id === gameId) {
-				Games.startNewRound()
-			}
+			Games.update({
+				_id: gameId,
+				endTime: {$exists: false}
+			}, {$set: {
+				endTime: new Date
+			}});
 		}, Games.roundTimeout);
 
 		return gameId;
