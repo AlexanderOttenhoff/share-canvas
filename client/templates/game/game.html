@@ -1,7 +1,12 @@
 <template name="game">
     <div class="panel panel-default game-area">
         <div class="panel-heading">
-            <h3 class="panel-title">Guess the movie</h3>
+            <h3 class="panel-title">
+                {{#if isDrawer}}
+                    Draw the movie
+                {{else}}
+                    Guess the movie
+                {{/if}}</h3>
             <div class="collapse navbar-collapse" id="main-nav">
                 {{#if currentUser}}
                     <ul class="nav navbar-nav navbar-right">

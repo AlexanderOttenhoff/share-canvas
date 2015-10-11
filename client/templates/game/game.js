@@ -9,8 +9,7 @@ Template.game.helpers({
       var startTime = Games.current().startTime;
       var start = moment(startTime);
       var now = moment();
-
-      return now.diff(start, 'seconds');
+      return Games.roundTimeout / 1000 - now.diff(start, 'seconds');
     }
   },
 });

@@ -64,9 +64,11 @@ Meteor.methods({
 		// TODO display message to all users
 
 		// start new round
-		Meteor.setTimeout(function(){
-			Games.startNewRound();
-		}, 5000);
+		if (Meteor.isServer){
+			Meteor.setTimeout(function(){
+				Games.startNewRound();
+			}, 5000);
+		}
 
 		if (guess.isCorrect){
 			return "win";
