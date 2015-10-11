@@ -167,6 +167,15 @@ Games.startNewRound = () => {
 Meteor.isServer && Meteor.setInterval(() => {
 	var currentGame = Games.current();
 
+	Games.update({
+		startTime: {$lt:  new Date(Date.now() - Games.roundTimeout)},
+		endTime: {$exists: false}
+	}, {
+		$set: {
+			endTime: new Date()
+		}
+	});
+
 	if (currentGame) {
 		// Check if the drawer of the game is still active
 
